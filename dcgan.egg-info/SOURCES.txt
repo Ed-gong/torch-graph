@@ -1,0 +1,6 @@
+dcgan.cpp
+setup.py
+dcgan.egg-info/PKG-INFO
+dcgan.egg-info/SOURCES.txt
+dcgan.egg-info/dependency_links.txt
+dcgan.egg-info/top_level.txt
