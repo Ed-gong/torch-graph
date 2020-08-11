@@ -10,34 +10,34 @@
 
 #include <string>
 #include <vector>
-#include <tpye.h>
-#include <graph.h>
-#include <plain_to_edge.h>
-#include <graph_view.h>
+//#include <cstdint>
+
+#include "type.h"
+#include "graph.h"
+#include "plain_to_edge.h"
+#include "graph_view.h"
 
 
+using namespace std;
 using torch::Tensor;
-using at::Scalar;
-
 using torch::autograd::Node;
-using torch::autograd::de：set numberleteNode;
+using torch::autograd::deleteNode;
 using torch::autograd::SavedVariable;
-
 using torch::autograd::variable_list;
 using torch::autograd::tensor_list;
 
 //using torch::autograd::as_variable;
 //using torch::autograd::as_variable_ref;
-
-using torch::autograd::compute_requires_grad;
-using torch::autograd::collect_next_edges;
-using torch::autograd::flatten_tensor_args;
-
+//using at::Scalar;
+//using torch::autograd::compute_requires_grad;
+//using torch::autograd::collect_next_edges;
+//using torch::autograd::flatten_tensor_args;
 
 graph*g = new graph();
 template <class T>
 struct ManagerWrap : torch::CustomClassHolder {
-  plaingraph_manager<T>* manager;
+  plaingraph_manager_t<T>* manager;
+
   ManagerWrap(int64_t flags) {
       manager = new plaingraph_manager_t<T>();
       manager -> schema(0);
@@ -45,11 +45,8 @@ struct ManagerWrap : torch::CustomClassHolder {
       manager -> prep_graph("/home/datalab/data/test1","");
       std:cout << "-> initilize the DAG!!" << std::endl;
   }
-
   
-torch::Tensor scatter_gather(const torch::Tensor & input_feature, gview_t<dst_id_t>* snaph, string gather_operator){
-  
-
+torch::Tensor scatter_gather(const torch::Tensor & input_feature, string gather_operator){
     snap_t<dst_id_t>* snaph = 0;
    //the input_message is the scatter messge
 
@@ -102,14 +99,14 @@ torch::Tensor scatter_gather(const torch::Tensor & input_feature, gview_t<dst_id
          if (it == mailbox.end()) continue;
          result[v] = mailbox[v];
     }
-
     return result;
-    
 }
+};
 
 
 TORCH_LIBRARY(my_classes, m) {
   m.class_<ManagerWrap<dst_id_t>>("ManagerWrap")
+  //m.class_<ManagerWrap<int64_t>>("ManagerWrap")
     // The following line registers the contructor of our MyStackClass
     // class that takes a single `std::vector<std::string>` argument,
     // i.e. it exposes the C++ method `MyStackClass(std::vector<T> init)`.
@@ -128,6 +125,7 @@ TORCH_LIBRARY(my_classes, m) {
     // that we must take the *address* of the fully-qualified method name,
     // i.e. use the unary `&` operator, due to C++ typing rules.
     .def("scatter_gather", &ManagerWrap<dst_id_t>::scatter_gather)
+    //.def("scatter_gather", &ManagerWrap<int64_t>::scatter_gather)
     //.def("pop", &MyStackClass<std::string>::pop)
     //.def("clone", &MyStackClass<std::string>::clone)
     //.def("merge", &MyStackClass<std::string>::merge)
