@@ -1,103 +1,102 @@
-// An example of using the PyTorch C++ API to implement a custom forward and backward function
-
+// This header is all you need to do the C++ portions of this
+// tutorial
+#include <torch/script.h>
 #include <iostream>
+// This header is what defines the custom class registration
+// behavior specifically. script.h already includes this, but
+// we include it here so you know it exists in case you want
+// to look at the API or implementation.
+#include <torch/custom_class.h>
+
+#include <string>
 #include <vector>
-#include <pybind11/pybind11.h>
-#include <torch/torch.h>
-#include <torch/csrc/autograd/variable.h>
-#include <torch/csrc/autograd/function.h>
-#include <torch/csrc/autograd/VariableTypeUtils.h>
-#include <torch/csrc/autograd/functions/utils.h>
+//#include <cstdint>
 
 #include "type.h"
+#include "graph.h"
+#include "plain_to_edge.h"
 #include "graph_view.h"
 
 
+using namespace std;
 using torch::Tensor;
-using at::Scalar;
-
 using torch::autograd::Node;
 using torch::autograd::deleteNode;
 using torch::autograd::SavedVariable;
-
 using torch::autograd::variable_list;
 using torch::autograd::tensor_list;
 
 //using torch::autograd::as_variable;
 //using torch::autograd::as_variable_ref;
+//using at::Scalar;
+//using torch::autograd::compute_requires_grad;
+//using torch::autograd::collect_next_edges;
+//using torch::autograd::flatten_tensor_args;
 
-using torch::autograd::compute_requires_grad;
-using torch::autograd::collect_next_edges;
-using torch::autograd::flatten_tensor_args;
+graph*g = new graph();
+template <class T>
+struct ManagerWrap : torch::CustomClassHolder {
+  plaingraph_manager_t<T>* manager;
+
+  ManagerWrap(int64_t flags, int64_t node_number, string path)  {
+      manager = new plaingraph_manager_t<T>();
+
+      std::cout << "-> initilize the DAG!!" << std::endl;
+      manager -> schema(0);
+      //manager -> setup_graph(100);
+      manager -> setup_graph(node_number);
+      //manager -> prep_graph("/home/datalab/data/test1","");
+      manager -> prep_graph(path,"");
+  }
 
 
-struct MyPowBackward : public Node {
-    // Public members that we use to store the forward pass, such that we can use it in gradient calculation
-    SavedVariable self_;
-    Scalar exponent_;
-
-    // The following function is called during the backward pass
-    variable_list apply(variable_list&& grads) override {
-        std::cout << "-> Computing MyPow Backward!" << std::endl;
-        
-        // Our function had one output, so we only expect 1 gradient
-        auto& grad = grads[0];
-        // Grab the data out of the saved variable
-        auto self = self_.unpack();
-        double exponent = exponent_.toDouble();
-
-        // Variable list to hold the gradients at the function's input variables
-        variable_list grad_inputs(1); 
-
-        // Do gradient computation for each of the inputs
-        if (should_compute_output(0)) {
-            auto grad_result = exponent != 0.0 ? grad * exponent * self.pow(exponent - 1) 
-                    : torch::zeros_like(self);
-            grad_inputs[0] = grad_result;
-        }
-
-        return grad_inputs;
-    }
-
-    // Apparently we need to manually handle destruction of SavedVaribles
-    void release_variables() override {
-        self_.reset_data();
-        self_.reset_grad_function();
-    }
-};
-
-torch::Tensor scatter_gather(torch::Tensor &input_feature, gview_t<dst_id_t>* snaph, string gather_operator){
-
-//this function only perform the messge passing and gather function, we assume the input_future
-//is the message each node need to pass to other nodes.
-
-    //the input_message is the scatter messge
-
+  
+torch::Tensor scatter_gather(const torch::Tensor & input_feature, string gather_operator){
+    snap_t<dst_id_t>* snaph = 0;
+    degree_t nebr_count = 0;
+    vid_t sid;
+    nebr_reader_t<dst_id_t> header;
+    pgraph_t<T>* pgraph_1 = manager->pgraph;
+   //the input_message is the scatter messge
+    snaph = create_static_view(pgraph_1, 1);//1 means it is a direct graph
     //build the mailbox
     std::map<int, torch::Tensor> mailbox;
 
     vid_t v_count = snaph->get_vcount();
-    degree_t nebr_count = 0;
-    vid_t sid;
-    nebr_reader_t<dst_id_t> header;
+    std::cout << "-> begin the scatter!!" << std::endl;
 
     for (vid_t v = 0; v < v_count; v++) {
-        if ( 0 == (nebr_count = snaph->get_nebrs_out(v, header))) continue;
 
+        //if ( 0 == (nebr_count = snaph->get_nebrs_out(v, header))) continue; 
+        nebr_count = snaph->get_nebrs_out(v, header);
+        //std::cout << nebr_count  << std::endl;
+        // if one node do not have any neighbor, we do not scatter it's message
+        if (nebr_count == 0){
+                continue;
+        }
+        // the node j scatter it's message to all neighors
          for (degree_t i = 0; i < nebr_count; ++i) {
             sid = TO_SID(get_sid(header[i]));
-            //If here is the first message for the node, build the dictionary
+            //std::cout << "the sid" <<std::endl;
+            
+            //If mailbox is empty, we initilize the mailbox
             if (mailbox.count(sid) == 0){
-                mailbox[v] = input_feature[sid]; 
-            }
-            // If the node has already received some messages, we concatenate the received tensor
-            torch::Tensor temp = torch::cat({mailbox[sid], input_feature[sid]}, 0);
-            mailbox[sid] = temp;
+                torch::Tensor message = input_feature[sid] * (float)1 / (float) nebr_count ;
+                mailbox[v] = message;
+                continue;
 
+            }
+            // If the mailbox is not emptys, we concatenate the received message with the new message
+            torch::Tensor message = input_feature[sid] * (float)1 / (float) nebr_count;
+            torch::Tensor temp = torch::cat({mailbox[sid], message});
+            //std::cout << temp<< std::endl;
+            mailbox[sid] = temp;
             }
 
         }
-    //gather procedure
+    //gather procedure, each node gather it's received message by the method defined by 'gather_operator' 
+    std::cout << "-> gather procedure begins!!" << std::endl;
+
     torch::Tensor temp; 
     for (std::map<int,torch::Tensor>::iterator it = mailbox.begin(); it!= mailbox.end(); ++it){
         
@@ -113,82 +112,56 @@ torch::Tensor scatter_gather(torch::Tensor &input_feature, gview_t<dst_id_t>* sn
              it->second = temp;
         }
 
-    // return a tensor with the input value after gather
-    torch::Tensor result = torch::zeros({100000});
+    //return the value of each node after gather procedure
+    torch::Tensor result = torch::zeros({v_count,1});//{v_count, 1} means the tensor is 1 dimension,... 
+    //otherwise, we cannot concatenated tensors
     for (vid_t v = 0; v < v_count; v++) {
         //loop the mailbox by key:node_id, value:tensor,
-        //if the node did not reveive any message, that node will be 0
+        //if the node did not reveive any message, the value of that node is 0
          map<int,torch::Tensor>::iterator it = mailbox.find(v);
          if (it == mailbox.end()) continue;
          result[v] = mailbox[v];
     }
-
     return result;
-    
+}
+};
 
+
+TORCH_LIBRARY(my_classes, m) {
+  m.class_<ManagerWrap<dst_id_t>>("ManagerWrap")
+  //m.class_<ManagerWrap<int64_t>>("ManagerWrap")
+    // The following line registers the contructor of our MyStackClass
+    // class that takes a single `std::vector<std::string>` argument,
+    // i.e. it exposes the C++ method `MyStackClass(std::vector<T> init)`.
+    // Currently, we do not support registering overloaded
+    // constructors, so for now you can only `def()` one instance of
+    // `torch::init`.
+    .def(torch::init<int64_t, int64_t, string>())
+    // The next line registers a stateless (i.e. no captures) C++ lambda
+    // function as a method. Note that a lambda function must take a
+    // `c10::intrusive_ptr<YourClass>` (or some const/ref version of that)
+    // as the first argument. Other arguments can be whatever you want.
+    // The following four lines expose methods of the MyStackClass<std::string>
+    // class as-is. `torch::class_` will automatically examine the
+    // argument and return types of the passed-in method pointers and
+    // expose these to Python and TorchScript accordingly. Finally, notice
+    // that we must take the *address* of the fully-qualified method name,
+    // i.e. use the unary `&` operator, due to C++ typing rules.
+    .def("scatter_gather", &ManagerWrap<dst_id_t>::scatter_gather)
+    //.def("get_vcount", &ManagerWrap<dst_id_t>::get_node)
+
+    //.def("scatter_gather", &ManagerWrap<int64_t>::scatter_gather)
+    //.def("pop", &MyStackClass<std::string>::pop)
+    //.def("clone", &MyStackClass<std::string>::clone)
+    //.def("merge", &MyStackClass<std::string>::merge)
+  ;
 }
 
 
-Tensor MyPowForward(torch::Tensor &input_feature, gview_t<dst_id_t>* snaph, string gather_operator)
-{
-    std::cout << "-> Computing MyPow Forward!" << std::endl;
-    // we use the "max" as the gather operation here
-    torch::Tensor tmp = scatter_gather(input_feature, snaph, "max"); //
-    
-
-    /*
-Tensor MyPowForward(const Tensor & self, Scalar exponent) {
-    std::cout << "-> Computing MyPow Forward!" << std::endl;
-    // Compute the function's output
-    //auto& self_ = as_variable_ref(self);
-    auto tmp = self.data().pow(exponent); // compute the output based on the tensor's data
-    
-
-    auto result = tmp;
-
-    // Prepare the infrastructure for computing the function's gradient
-    if (compute_requires_grad( self )) {
-        // Initialize the gradient function
-        auto grad_fn = std::shared_ptr<MyPowBackward>(new MyPowBackward(), deleteNode);
-
-        // Connect into the autograd graph
-        grad_fn->set_next_edges(collect_next_edges( self ));
-
-        // Save the function arguments for use in the backwards pass
-        grad_fn->self_ = SavedVariable(self, false);
-        grad_fn->exponent_ = exponent;
-
-        // Attach the gradient function to the result
-        set_history(flatten_tensor_args( result ), grad_fn);
-    }
-
-    return result;
-
-    */
-    return tmp;
-}
-
-/*
-int main() {
-    auto a = 3*torch::ones({3,3});
-    a.set_requires_grad(true);
-
-    std::cout << "Begin Forward Pass" << std::endl;
-    / *
-    auto b = MyPowForward(a, 2).sum();
-
-    std::cout << "Begin Backward Pass" << std::endl;
-    b.backward();
-
-    std::cout << a.grad() << std::endl;
-
-    * /
-}*/
 
 
 
-//PYBIND11_MODULE(dcgan, m) {
-PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-  m.def("forward", &MyPowForward, "LLTM forward");
-}
+
+
+
 
