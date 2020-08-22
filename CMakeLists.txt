@@ -13,11 +13,16 @@ include_directories("${GONE_DIR}/src"
                     "${GONE_DIR}/analytics"
 	)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DB32 -DOVER_COOMIT -DPLAIN_GRAPH -DTBB -DDEL -DSDEL -DCOMPACTION -fopenmp")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DB32 -DOVER_COOMIT -DPLAIN_GRAPH -DTBB -DDEL -DSDEL -DCOMPACTION -fopenmp"
+)
+
+
 
 # Define our library target
-add_library(dcgan SHARED dcgan.cpp)
+add_library(dcgan SHARED  main.cpp GCN.h GCN.cpp ManagerWrap.h ManagerWrap.cpp)
 
 # Link against LibTorch
 target_link_libraries(dcgan "${TORCH_LIBRARIES}")
 target_link_libraries(dcgan -Wl,--no-as-needed ${GONE_DIR}/libgraphone32.a -ltbb) 
+#target_link_libraries(dcgan "${SOURCES}")
+
