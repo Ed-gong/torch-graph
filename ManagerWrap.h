@@ -23,7 +23,7 @@
 #include "graph.h"
 #include "plain_to_edge.h"
 #include "graph_view.h"
-
+#include "SnapWrap.h"
 
 using namespace std;
 using torch::Tensor;
@@ -33,15 +33,21 @@ using torch::autograd::SavedVariable;
 using torch::autograd::variable_list;
 using torch::autograd::tensor_list;
 
-torch::Tensor scatter_gather1(plaingraph_manager_t<dst_id_t>* manager, 
+torch::Tensor scatter_gather1(snap_t<dst_id_t>* snaph, 
                              const torch::Tensor & input_feature, 
                              string gather_operator);
+
+snap_t<dst_id_t>* check_current_graph(plaingraph_manager_t<dst_id_t>* manager, snap_t<dst_id_t>* snaph);
+
+
 
 struct ManagerWrap : torch::CustomClassHolder {
     plaingraph_manager_t<dst_id_t>* manager;
 
     ManagerWrap(int64_t flags, int64_t node_number, string path);
-    torch::Tensor scatter_gather(const torch::Tensor & input_feature, string gather_operator);
+    torch::Tensor scatter_gather(const torch::Tensor & input_feature, string gather_operator, 
+                            c10::intrusive_ptr<SnapWrap> snaph);     
+    void create_static_view(c10::intrusive_ptr<SnapWrap> snaph);
 };
 
 #endif //UNTITLED1_MANAGERWRAP_H

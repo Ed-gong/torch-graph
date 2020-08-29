@@ -19,6 +19,7 @@ using torch::autograd::SavedVariable;
 using torch::autograd::variable_list;
 using torch::autograd::tensor_list;
 #include "GCN.h"
+#include "ManagerWrap.h"
 
 
 //Gcn layer
@@ -28,7 +29,7 @@ GraphConv::GraphConv(int64_t N, int64_t M) {
 }
 
 //torch::Tensor forward(torch::Tensor input, ManagerWrap manager) 
-torch::Tensor GraphConv::forward(torch::Tensor input, plaingraph_manager_t<dst_id_t>* manager) 
+torch::Tensor GraphConv::forward(torch::Tensor input, snap_t<dst_id_t>* snaph) 
 {    
     torch::Tensor dst_data;
 
@@ -36,11 +37,11 @@ torch::Tensor GraphConv::forward(torch::Tensor input, plaingraph_manager_t<dst_i
     //mult W first to reduce the feature size for aggregation
 
         input = torch::matmul(input, W);
-        dst_data = scatter_gather1(manager, input, "sum");
+        dst_data = scatter_gather1(snaph, input, "sum");
     }
     else {
     //aggregate first then mult W
-        dst_data = scatter_gather1(manager, input, "sum");
+        dst_data = scatter_gather1(snaph, input, "sum");
         dst_data = torch::matmul(dst_data, W);
 
     }
@@ -50,15 +51,26 @@ torch::Tensor GraphConv::forward(torch::Tensor input, plaingraph_manager_t<dst_i
 
 //Gcn
 GCN::GCN(int64_t in_features, int64_t hidden_size, int64_t num_class) 
-        : conv1(in_features, hidden_size), conv2(in_features, hidden_size) 
+        : conv1(in_features, hidden_size), conv2(hidden_size, num_class) 
 {
     std::cout<< "initilize the GCN" << std::endl;
 }
 
-torch::Tensor GCN::forward(torch::Tensor input, plaingraph_manager_t<dst_id_t>* manager) 
+torch::Tensor GCN::forward(torch::Tensor input, snap_t<dst_id_t>* snaph) 
 {
-    torch:: Tensor h = conv1.forward(input, manager);
+    torch:: Tensor h = conv1.forward(input, snaph);
     h = torch::relu(h);
-    h = conv2.forward(h, manager);
+    h = conv2.forward(h, snaph);
     return h;
+}
+
+
+vector<torch::Tensor> GCN::parameters(){
+    std::vector<torch::Tensor> result;
+    torch::Tensor para1 = conv1.W;
+    torch::Tensor para2 = conv2.W;
+    result.push_back(para1);
+    result.push_back (para2);
+    return result;
+
 }

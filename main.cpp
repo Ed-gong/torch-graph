@@ -18,9 +18,10 @@ using torch::autograd::deleteNode;
 using torch::autograd::SavedVariable;
 using torch::autograd::variable_list;
 using torch::autograd::tensor_list;
+
+#include "SnapWrap.h"
 #include "ManagerWrap.h"
 #include "GCN.h"
-
 
 struct GCNWrap : torch::CustomClassHolder {
   //plaingraph_manager_t<T>* manager;
@@ -33,11 +34,23 @@ struct GCNWrap : torch::CustomClassHolder {
 
   }
 
-  //torch::Tensor forward(torch::Tensor input, ManagerWrap manager)
-  torch::Tensor forward(torch::Tensor input, c10::intrusive_ptr<ManagerWrap> manager)
+  //torch::Tensor forward(torch::Tensor input, snap_t<dst_id_t>* snaph)
+  torch::Tensor forward(torch::Tensor input, c10::intrusive_ptr<SnapWrap> snaph)
   {
-      torch::Tensor result = net.forward(input, manager->manager);
+      torch::Tensor result = net.forward(input, snaph->snaph);
       return result;
+  }
+ /*
+  c10::intrusive_ptr<SnapWrap> get_current_graph(c10::intrusive_ptr<ManagerWrap> manager, 
+                c10::intrusive_ptr<SnapWrap> snaph)
+  {
+      snap_t<dst_id_t>* snaph1 = net.get_current_graph(manager->manager,snaph->snaph);
+      return snaph1;
+  }*/
+
+  vector<torch::Tensor> parameters(){
+        vector<torch::Tensor> result = net.parameters();
+        return result;
   }
   GCN net; 
 };
@@ -45,7 +58,21 @@ struct GCNWrap : torch::CustomClassHolder {
 
 
 TORCH_LIBRARY(my_classes, m) {
+  m.class_<SnapWrap>("SnapWrap")
+    .def(torch::init<>())
+  ;
+
+  m.class_<ManagerWrap>("ManagerWrap")
+    .def(torch::init<int64_t, int64_t, string>())
+    .def("create_static_view",&ManagerWrap::create_static_view)
+    .def("scatter_gather", &ManagerWrap::scatter_gather)
+  ;
   m.class_<GCNWrap>("GCNWrap")
+    .def(torch::init<int64_t, int64_t, int64_t>())
+    .def("forward", &GCNWrap::forward)
+    .def("parameters",&GCNWrap::parameters)
+    //.def("get_current_graph",&GCNWrap::get_current_graph)
+  ;
   //m.class_<ManagerWrap<int64_t>>("ManagerWrap")
     // The following line registers the contructor of our MyStackClass
     // class that takes a single `std::vector<std::string>` argument,
@@ -53,7 +80,6 @@ TORCH_LIBRARY(my_classes, m) {
     // Currently, we do not support registering overloaded
     // constructors, so for now you can only `def()` one instance of
     // `torch::init`.
-    .def(torch::init<int64_t, int64_t, int64_t>())
     // The next line registers a stateless (i.e. no captures) C++ lambda
     // function as a method. Note that a lambda function must take a
     // `c10::intrusive_ptr<YourClass>` (or some const/ref version of that)
@@ -64,12 +90,10 @@ TORCH_LIBRARY(my_classes, m) {
     // expose these to Python and TorchScript accordingly. Finally, notice
     // that we must take the *address* of the fully-qualified method name,
     // i.e. use the unary `&` operator, due to C++ typing rules.
-    .def("forward", &GCNWrap::forward)
     //.def("get_vcount", &ManagerWrap<dst_id_t>::get_node)
     //.def("scatter_gather", &ManagerWrap<int64_t>::scatter_gather)
     //.def("pop", &MyStackClass<std::string>::pop)
     //.def("clone", &MyStackClass<std::string>::clone)
     //.def("merge", &MyStackClass<std::string>::merge)
-  ;
 }
 

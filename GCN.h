@@ -21,12 +21,13 @@ using torch::autograd::SavedVariable;
 using torch::autograd::variable_list;
 using torch::autograd::tensor_list;
 #include "ManagerWrap.h"
+#include "SnapWrap.h"
 
 
 //Gcn layer
 struct GraphConv : torch::nn::Module {
     GraphConv(int64_t N, int64_t M); 
-    torch::Tensor forward(torch::Tensor input, plaingraph_manager_t<dst_id_t>* manager);
+    torch::Tensor forward(torch::Tensor input, snap_t<dst_id_t>* snaph);
     torch::Tensor W;
     int64_t M;
     int64_t N;
@@ -35,6 +36,9 @@ struct GraphConv : torch::nn::Module {
 //Gcn
 struct GCN : torch::nn::Module {
     GCN(int64_t in_features, int64_t hidden_size, int64_t num_class); 
-    torch::Tensor forward(torch::Tensor input, plaingraph_manager_t<dst_id_t>* manager); 
+    torch::Tensor forward(torch::Tensor input, snap_t<dst_id_t>* snaph);
+    vector<torch::Tensor> parameters();
+    //snap_t<dst_id_t>* get_current_graph(plaingraph_manager_t<dst_id_t>* manager, snap_t<dst_id_t>* snaph);
+    //c10::intrusive_ptr<SnapWrap>  get_current_graph(plaingraph_manager_t<dst_id_t>* manager, snap_t<dst_id_t>* snaph);
     GraphConv conv1, conv2;
 };

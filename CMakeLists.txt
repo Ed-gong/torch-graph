@@ -19,7 +19,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DB32 -DOVER_COOMIT -DPLAIN_GRAPH -DTBB 
 
 
 # Define our library target
-add_library(dcgan SHARED  main.cpp GCN.h GCN.cpp ManagerWrap.h ManagerWrap.cpp)
+add_library(dcgan SHARED  main.cpp GCN.h GCN.cpp ManagerWrap.h ManagerWrap.cpp SnapWrap.h SnapWrap.cpp)
 
 # Link against LibTorch
 target_link_libraries(dcgan "${TORCH_LIBRARIES}")

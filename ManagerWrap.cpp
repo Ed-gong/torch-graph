@@ -35,17 +35,23 @@ using torch::autograd::tensor_list;
 
 graph*g = new graph();
 
-torch::Tensor scatter_gather1(plaingraph_manager_t<dst_id_t>* manager, 
+snap_t<dst_id_t>* check_current_graph(plaingraph_manager_t<dst_id_t>* manager){
+    pgraph_t<dst_id_t>* pgraph_1 = manager->pgraph;
+   //the input_message is the scatter messge
+    snap_t<dst_id_t>* snaph = create_static_view(pgraph_1, 1);//1 means it is a direct graph
+    return snaph;
+}
+
+torch::Tensor scatter_gather1(snap_t<dst_id_t>* snaph, 
                              const torch::Tensor & input_feature, 
                              string gather_operator)
 {
-    snap_t<dst_id_t>* snaph = 0;
+    
+    //snap_t<dst_id_t>* snaph = 0;
     degree_t nebr_count = 0;
     vid_t sid;
     nebr_reader_t<dst_id_t> header;
-    pgraph_t<dst_id_t>* pgraph_1 = manager->pgraph;
-   //the input_message is the scatter messge
-    snaph = create_static_view(pgraph_1, 1);//1 means it is a direct graph
+
     //build the mailbox
     std::map<int, torch::Tensor> mailbox;
     vid_t v_count = snaph->get_vcount();
@@ -99,7 +105,8 @@ torch::Tensor scatter_gather1(plaingraph_manager_t<dst_id_t>* manager,
         }
 
     //return the value of each node after gather procedure
-    torch::Tensor result = torch::zeros({v_count,1});//{v_count, 1} means the tensor is 1 dimension,otherwise, we cannot concatenated tensors
+    int output_dim = input_feature.size(1);
+    torch::Tensor result = torch::zeros({v_count,output_dim});//{v_count, 1} means the tensor is 1 dimension,otherwise, we cannot concatenated tensors
     for (vid_t v = 0; v < v_count; v++) {
         //loop the mailbox by key:node_id, value:tensor,
         //if the node did not reveive any message, the value of that node is 0
@@ -122,17 +129,15 @@ ManagerWrap::ManagerWrap(int64_t flags, int64_t node_number, string path)  {
     manager -> prep_graph(path,"");
 }
   
-torch::Tensor ManagerWrap::scatter_gather(const torch::Tensor & input_feature, string gather_operator) {
-    return scatter_gather1(manager, input_feature, gather_operator);
+torch::Tensor ManagerWrap::scatter_gather(const torch::Tensor & input_feature, string gather_operator,
+                                          c10::intrusive_ptr<SnapWrap> snaph)
+{
+    torch::Tensor result = scatter_gather1(snaph->snaph, input_feature, gather_operator);
+    return result;
 }
 
-
-
-
-
-
-
-
-
-
-
+void ManagerWrap::create_static_view(c10::intrusive_ptr<SnapWrap> snaph)
+{
+    //create view here
+    snaph->snaph = check_current_graph(manager);
+}
