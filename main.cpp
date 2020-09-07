@@ -22,40 +22,40 @@ using torch::autograd::tensor_list;
 #include "SnapWrap.h"
 #include "ManagerWrap.h"
 #include "GCN.h"
+ 
+/*
+c10::intrusive_ptr<SnapWrap> get_current_graph(c10::intrusive_ptr<ManagerWrap> manager, 
+                c10::intrusive_ptr<SnapWrap> snaph)
+{
+    snap_t<dst_id_t>* snaph1 = net.get_current_graph(manager->manager,snaph->snaph);
+    return snaph1;
+}*/
 
 struct GCNWrap : torch::CustomClassHolder {
   //plaingraph_manager_t<T>* manager;
 
   GCNWrap(int64_t in_features_dim, int64_t hidden_size, int64_t num_class) 
   :net(in_features_dim, hidden_size, num_class){
-      //manager = new plaingraph_manager_t<T>();
-
-      //GCN net(in_features_dim, hidden_size, num_class);
-
   }
 
-  //torch::Tensor forward(torch::Tensor input, snap_t<dst_id_t>* snaph)
   torch::Tensor forward(torch::Tensor input, c10::intrusive_ptr<SnapWrap> snaph)
   {
-      torch::Tensor result = net.forward(input, snaph->snaph);
+      torch::Tensor result = net.forward(input, snaph);
       return result;
   }
- /*
-  c10::intrusive_ptr<SnapWrap> get_current_graph(c10::intrusive_ptr<ManagerWrap> manager, 
-                c10::intrusive_ptr<SnapWrap> snaph)
-  {
-      snap_t<dst_id_t>* snaph1 = net.get_current_graph(manager->manager,snaph->snaph);
-      return snaph1;
-  }*/
 
   vector<torch::Tensor> parameters(){
+    /*
+        for (const auto& p : net.parameters()) {
+            std::cout << p << std::endl;
+        }
+        return net.parameters();
+        */
         vector<torch::Tensor> result = net.parameters();
         return result;
   }
   GCN net; 
 };
-
-
 
 TORCH_LIBRARY(my_classes, m) {
   m.class_<SnapWrap>("SnapWrap")

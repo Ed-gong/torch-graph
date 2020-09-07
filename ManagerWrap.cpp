@@ -44,7 +44,7 @@ snap_t<dst_id_t>* check_current_graph(plaingraph_manager_t<dst_id_t>* manager){
 
 torch::Tensor scatter_gather1(snap_t<dst_id_t>* snaph, 
                              const torch::Tensor & input_feature, 
-                             string gather_operator)
+                             string gather_operator, int64_t reverse)
 {
     
     //snap_t<dst_id_t>* snaph = 0;
@@ -60,7 +60,11 @@ torch::Tensor scatter_gather1(snap_t<dst_id_t>* snaph,
     for (vid_t v = 0; v < v_count; v++) {
 
         //if ( 0 == (nebr_count = snaph->get_nebrs_out(v, header))) continue; 
-        nebr_count = snaph->get_nebrs_out(v, header);
+        if (reverse == 1){
+            nebr_count = snaph->get_nebrs_in(v, header);
+        } else {
+            nebr_count = snaph->get_nebrs_out(v, header);
+        }
         //std::cout << nebr_count  << std::endl;
         // if one node do not have any neighbor, we do not scatter it's message
         if (nebr_count == 0){
@@ -114,8 +118,12 @@ torch::Tensor scatter_gather1(snap_t<dst_id_t>* snaph,
          if (it == mailbox.end()) continue;
          result[v] = mailbox[v];
     }
+    std::cout<< "print the mailbox output" << std::endl;
+    std::cout<< result<< std::endl;
+    
     return result;
 }
+
 
 
 ManagerWrap::ManagerWrap(int64_t flags, int64_t node_number, string path)  {
@@ -130,9 +138,9 @@ ManagerWrap::ManagerWrap(int64_t flags, int64_t node_number, string path)  {
 }
   
 torch::Tensor ManagerWrap::scatter_gather(const torch::Tensor & input_feature, string gather_operator,
-                                          c10::intrusive_ptr<SnapWrap> snaph)
+                                          c10::intrusive_ptr<SnapWrap> snaph, int64_t reverse)
 {
-    torch::Tensor result = scatter_gather1(snaph->snaph, input_feature, gather_operator);
+    torch::Tensor result = scatter_gather1(snaph->snaph, input_feature, gather_operator, reverse);
     return result;
 }
 
