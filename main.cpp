@@ -38,9 +38,10 @@ struct GCNWrap : torch::CustomClassHolder {
   :net(in_features_dim, hidden_size, num_class){
   }
 
-  torch::Tensor forward(torch::Tensor input, c10::intrusive_ptr<SnapWrap> snaph)
-  {
-      torch::Tensor result = net.forward(input, snaph);
+  torch::Tensor forward(torch::Tensor input, c10::intrusive_ptr<SnapWrap> snaph, torch::Tensor weight2, torch::Tensor weight3)
+  {   
+      std::cout<<"wu"<<std::endl;
+      torch::Tensor result = net.forward(input, snaph, weight2, weight3);
       return result;
   }
 

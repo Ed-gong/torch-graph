@@ -35,7 +35,10 @@ using torch::autograd::tensor_list;
 
 torch::Tensor scatter_gather1(snap_t<dst_id_t>* snaph, 
                              const torch::Tensor & input_feature, 
-                             string gather_operator);
+                             string gather_operator, int64_t reverse);
+
+
+
 
 snap_t<dst_id_t>* check_current_graph(plaingraph_manager_t<dst_id_t>* manager, snap_t<dst_id_t>* snaph);
 
@@ -46,7 +49,7 @@ struct ManagerWrap : torch::CustomClassHolder {
 
     ManagerWrap(int64_t flags, int64_t node_number, string path);
     torch::Tensor scatter_gather(const torch::Tensor & input_feature, string gather_operator, 
-                            c10::intrusive_ptr<SnapWrap> snaph);     
+                            c10::intrusive_ptr<SnapWrap> snaph, int64_t reverse);     
     void create_static_view(c10::intrusive_ptr<SnapWrap> snaph);
 };
 
