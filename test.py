@@ -5,6 +5,20 @@ import torch.nn.functional as F
 import time
 from graphviz import Digraph
 from torchviz import make_dot
+import matplotlib.animation as animation
+import matplotlib.pyplot as plt
+from sklearn import metrics
+
+
+def accuracy(prediction, label):
+    correct = 0 
+    result = []
+    for i in range(len(label)):
+        #print("nani?")
+        result.append(prediction[i])
+        if (prediction[i] == label[i]):
+            correct = correct + 1
+    return correct / float(len(label)), result
 
 torch.classes.load_library("build/libdcgan.so")
 print(torch.classes.loaded_libraries)
@@ -54,6 +68,7 @@ embed = nn.Embedding.from_pretrained(weight1)
 print ("input_feature")
 print(embed.weight)
 inputs = embed.weight
+print(weight1.size())
 print("???")
 net = torch.classes.my_classes.GCNWrap(input_feature_dim, 5, 2)
 manager1 = torch.classes.my_classes.ManagerWrap(1, num_node, graph_data_path)
@@ -78,21 +93,30 @@ weight3 = torch.tensor([[-0.4980, -0.6419],
 #assign two labels to only two nodes
 labeled_nodes = torch.tensor([0, 33])  # only the instructor and the president nodes are labeled
 labels = torch.tensor([0, 1])  # their labels are different
+# define the test for the remaining node
+temp = []
+for i in range(33):
+    temp.append(i)
+temp.remove(0)
+labeled_nodes_test = torch.tensor(temp)
+labels_test = torch.tensor([0,0,0,0,0,0,0,0,1,0,0,0,0,1,1,0,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1])
+
+
 
 # train the network
 
 optimizer = torch.optim.Adam(itertools.chain(net.parameters(), embed.parameters()), lr=0.01)
 #optimizer = torch.optim.Adam([net.parameters(), itertools.chain(embed.parameters())], lr=0.01)
 all_logits = []
-for epoch in range(100):
+for epoch in range(200):
     print("ai")
-    logits = net.forward(inputs, manager, weight2, weight3)
+    logits = net.forward(inputs, manager)
     print("hu")
     # we save the logits for visualization later
     all_logits.append(logits.detach())
     logp = F.log_softmax(logits, 1)
     print ("predict result")
-    #print (logp)
+    print (logp)
     # we only compute loss for labeled nodes
     
     loss = F.nll_loss(logp[labeled_nodes], labels)
@@ -105,7 +129,22 @@ for epoch in range(100):
     
     print('Epoch %d | Loss: %.4f' % (epoch, loss.item()))
     print ("the parameter after one update")
+    logp_acc = torch.max(logp, 1).indices
+    accu, labels_test_temp = accuracy(logp_acc[labeled_nodes_test],labels_test)
+    print('Epoch %d | accuracy: %.4f' % (epoch, accu))
+    print("evaluation report:")
+    print(metrics.classification_report(labels_test, labels_test_temp, digits=3))
+
 
     
-    print (weight2)
-    print(weight3)
+    #print (weight2)
+    #print(weight3)
+
+# check the node predicton class
+print ("node prediction class")
+for v in range(34):
+    temp = all_logits[199][v].numpy()
+    cls = temp.argmax()
+    print ("node" + str(v) + ":" + str(cls) + "\n")
+
+
