@@ -104,6 +104,8 @@ labels_test = torch.tensor([0,0,0,0,0,0,0,0,1,0,0,0,0,1,1,0,0,1,0,1,1,1,1,1,1,1,
 
 
 # train the network
+loss_record = []
+accu_record = []
 
 optimizer = torch.optim.Adam(itertools.chain(net.parameters(), embed.parameters()), lr=0.01)
 #optimizer = torch.optim.Adam([net.parameters(), itertools.chain(embed.parameters())], lr=0.01)
@@ -128,13 +130,14 @@ for epoch in range(200):
     optimizer.step()
     
     print('Epoch %d | Loss: %.4f' % (epoch, loss.item()))
+    loss_record.append(loss.item())
     print ("the parameter after one update")
     logp_acc = torch.max(logp, 1).indices
     accu, labels_test_temp = accuracy(logp_acc[labeled_nodes_test],labels_test)
+    accu_record.append(accu)
     print('Epoch %d | accuracy: %.4f' % (epoch, accu))
     print("evaluation report:")
     print(metrics.classification_report(labels_test, labels_test_temp, digits=3))
-
 
     
     #print (weight2)
@@ -146,5 +149,10 @@ for v in range(34):
     temp = all_logits[199][v].numpy()
     cls = temp.argmax()
     print ("node" + str(v) + ":" + str(cls) + "\n")
+
+print ("loss_record")
+print(loss_record)
+print("accu")
+print(accu_record)
 
 
