@@ -25,6 +25,24 @@ using torch::autograd::tensor_list;
 #include <torch/torch.h>
 using namespace torch::autograd;
 
+
+
+torch::Tensor find_out_degree(snap_t<dst_id_t>* snaph){
+    degree_t nebr_count = 0;
+    nebr_reader_t<dst_id_t> header;
+    vid_t v_count = snaph->get_vcount();
+    torch::Tensor degree_list = torch::ones({v_count,1});
+
+
+    for (vid_t v = 0; v < v_count; v++) {
+        nebr_count = snaph -> get_nebrs_out(v, header);
+        degree_list[v] = degree_list[v] * nebr_count;
+    }
+
+    return degree_list;
+}
+
+
 // Inherit from Function
 class Scatter_gather : public Function<Scatter_gather> {
 public:
@@ -68,13 +86,13 @@ public:
 
 //Gcn layer
 GraphConv::GraphConv(int64_t N, int64_t M) {
-    //W = register_parameter("W", torch::randn({N, M}));
+    W = register_parameter("W", torch::randn({N, M}));
     //std::cout << W << std::endl;
     b = register_parameter("b", torch::zeros(M));
 }
 
 //torch::Tensor forward(torch::Tensor input, ManagerWrap manager) 
-torch::Tensor GraphConv::forward(torch::Tensor input, c10::intrusive_ptr<SnapWrap> snaph, torch::Tensor weight) 
+torch::Tensor GraphConv::forward(torch::Tensor input, c10::intrusive_ptr<SnapWrap> snaph) 
 {    
     torch::Tensor dst_data;
 
@@ -92,14 +110,20 @@ torch::Tensor GraphConv::forward(torch::Tensor input, c10::intrusive_ptr<SnapWra
         dst_data = torch::matmul(dst_data, W);
 
     }*/
-    cout << "input to layer matmul" << endl;
-    cout << input << endl;
-    torch::Tensor input1 = torch::matmul(input, weight);
-    cout << "output of layer matmul" << endl;
-    cout << input1 << endl;
+    //cout << "input to layer matmul" << endl;
+    //cout << input << endl;
+    torch::Tensor degree_list = find_out_degree(snaph->snaph);
+    int num_dim = degree_list.size(0);
+    degree_list = degree_list.reshape({num_dim, 1});
+    torch::Tensor norm = torch::pow(degree_list, -0.5);
+    input = input * norm;
+
+    torch::Tensor input1 = torch::matmul(input, W);
+    //cout << "output of layer matmul" << endl;
+    //cout << input1 << endl;
     dst_data = Scatter_gather::apply(input1, snaph, "sum");// "0" represent there is no reverse here.
-    //input = torch::matmul(input, weight);
-    //dst_data = Scatter_gather::apply(input, snaph, "sum", W);
+    dst_data = dst_data * norm; // we apply 'both'as the norm, so we need to apply it twice
+
     dst_data += b;
     return dst_data;
 }
@@ -115,21 +139,17 @@ GCN::GCN(int64_t in_features, int64_t hidden_size, int64_t num_class)
 
 torch::Tensor GCN::forward(torch::Tensor input, 
                            //snap_t<dst_id_t>* snaph
-                           c10::intrusive_ptr<SnapWrap> snaph, torch::Tensor weight2, torch::Tensor weight3
+                           c10::intrusive_ptr<SnapWrap> snaph
                            ) 
 {
-    torch:: Tensor h = conv1.forward(input, snaph, weight2);
-    cout << "weight2" << endl;
-    cout << weight2 << endl;
+    torch:: Tensor h = conv1.forward(input, snaph);
     std::cout<<"output of first layer"<<std::endl;
     std::cout<<h<<std::endl;
     h = torch::relu(h);
     std::cout<<"---> output of relu"<<std::endl;
     std::cout<<h<<std::endl;
 
-    h = conv2.forward(h, snaph, weight3);
-    cout << "weight3" << endl;
-    cout << weight3 << endl;
+    h = conv2.forward(h, snaph);
     std::cout<<"---> output of second layer"<<std::endl;
     std::cout<<h<<std::endl;
     return h;
@@ -138,10 +158,16 @@ torch::Tensor GCN::forward(torch::Tensor input,
 
 vector<torch::Tensor> GCN::parameters(){
     std::vector<torch::Tensor> result;
-    torch::Tensor para1 = conv1.b;
-    torch::Tensor para2 = conv2.b;
+    torch::Tensor para1 = conv1.W;
+    torch::Tensor para2 = conv1.b;
+
+    torch::Tensor para3 = conv2.W;
+    torch::Tensor para4 = conv2.b;
+
     result.push_back(para1);
     result.push_back (para2);
+    result.push_back (para3);
+    result.push_back (para4);
+
     return result;
 }
-
