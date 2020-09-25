@@ -42,6 +42,41 @@ snap_t<dst_id_t>* check_current_graph(plaingraph_manager_t<dst_id_t>* manager){
     return snaph;
 }
 
+
+torch::Tensor check_adjacency_matrix1(snap_t<dst_id_t>* snaph)
+{
+    degree_t nebr_count = 0;
+    nebr_reader_t<dst_id_t> header;
+    vid_t sid;
+    vid_t v_count = snaph->get_vcount();
+    torch::Tensor adj_matrix = torch::zeros({v_count,v_count});
+
+
+    for (vid_t v = 0; v < v_count; v++) {
+        nebr_count = snaph -> get_nebrs_out(v, header);
+        if (nebr_count == 0){
+            continue; 
+        }else{  
+            for (degree_t i = 0; i < nebr_count; ++i) {
+                sid = TO_SID(get_sid(header[i]));
+                std::cout<<"weisheme"<<std::endl;
+                std::cout<<sid<<std::endl;
+                adj_matrix[v][sid] = 1;
+        }
+    }
+    }
+
+    return adj_matrix;
+
+}
+    
+
+
+
+
+
+
+
 torch::Tensor scatter_gather1(snap_t<dst_id_t>* snaph, 
                              const torch::Tensor & input_feature, 
                              string gather_operator, int64_t reverse)
@@ -76,6 +111,8 @@ torch::Tensor scatter_gather1(snap_t<dst_id_t>* snaph,
         torch::Tensor message = input_feature[v];
         for (degree_t i = 0; i < nebr_count; ++i) {
             sid = TO_SID(get_sid(header[i]));
+            //std::cout<<"2222"<<std::endl;
+            //std::cout<< sid<< std::endl;
             message += input_feature[sid];
         }
         result[v] = message/nebr_count;
@@ -198,7 +235,7 @@ ManagerWrap::ManagerWrap(int64_t flags, int64_t node_number, string path)  {
     manager = new plaingraph_manager_t<dst_id_t>();
 
     std::cout << "-> initilize the DAG!!" << std::endl;
-    manager -> schema(0);
+    manager -> schema(flags);
     //manager -> setup_graph(100);
     manager -> setup_graph(node_number);
     //manager -> prep_graph("/home/datalab/data/test1","");
@@ -211,6 +248,17 @@ torch::Tensor ManagerWrap::scatter_gather(const torch::Tensor & input_feature, s
     torch::Tensor result = scatter_gather1(snaph->snaph, input_feature, gather_operator, reverse);
     return result;
 }
+
+
+torch::Tensor ManagerWrap::check_adjacency_matrix(c10::intrusive_ptr<SnapWrap> snaph)
+{
+    torch::Tensor result = check_adjacency_matrix1(snaph->snaph);
+    return result;
+}
+
+
+
+
 
 void ManagerWrap::create_static_view(c10::intrusive_ptr<SnapWrap> snaph)
 {

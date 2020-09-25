@@ -24,10 +24,13 @@ using torch::autograd::tensor_list;
 #include "ManagerWrap.h"
 
 
+torch::Tensor find_in_degree(snap_t<dst_id_t>* snaph);
+
+
 //Gcn layer
 struct GraphConv : torch::nn::Module {
     GraphConv(int64_t N, int64_t M); 
-    torch::Tensor forward(torch::Tensor input, c10::intrusive_ptr<SnapWrap> snaph, torch::Tensor weight);
+    torch::Tensor forward(torch::Tensor input, c10::intrusive_ptr<SnapWrap> snaph);
     torch::Tensor W;
     torch::Tensor b;
     int64_t M;
@@ -37,7 +40,7 @@ struct GraphConv : torch::nn::Module {
 //Gcn
 struct GCN : torch::nn::Module {
     GCN(int64_t in_features, int64_t hidden_size, int64_t num_class); 
-    torch::Tensor forward(torch::Tensor input, c10::intrusive_ptr<SnapWrap> snaphi, torch::Tensor weight2, torch::Tensor weight3);
+    torch::Tensor forward(torch::Tensor input, c10::intrusive_ptr<SnapWrap> snaphi);
     vector<torch::Tensor> parameters();
     //snap_t<dst_id_t>* get_current_graph(plaingraph_manager_t<dst_id_t>* manager, snap_t<dst_id_t>* snaph);
     //c10::intrusive_ptr<SnapWrap>  get_current_graph(plaingraph_manager_t<dst_id_t>* manager, snap_t<dst_id_t>* snaph);
