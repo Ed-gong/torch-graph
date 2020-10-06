@@ -37,6 +37,14 @@ torch::Tensor scatter_gather1(snap_t<dst_id_t>* snaph,
                              const torch::Tensor & input_feature, 
                              string gather_operator, int64_t reverse);
 
+torch::Tensor scatter_gather2(snap_t<dst_id_t>* snaph,
+                             const torch::Tensor & input_feature,
+                             string gather_operator, int64_t reverse);
+
+torch::Tensor check_adjacency_matrix1(snap_t<dst_id_t>* snaph);
+
+
+
 
 
 
@@ -49,7 +57,9 @@ struct ManagerWrap : torch::CustomClassHolder {
 
     ManagerWrap(int64_t flags, int64_t node_number, string path);
     torch::Tensor scatter_gather(const torch::Tensor & input_feature, string gather_operator, 
-                            c10::intrusive_ptr<SnapWrap> snaph, int64_t reverse);     
+                            c10::intrusive_ptr<SnapWrap> snaph, int64_t reverse);  
+    
+    torch::Tensor check_adjacency_matrix(c10::intrusive_ptr<SnapWrap> snaph);   
     void create_static_view(c10::intrusive_ptr<SnapWrap> snaph);
 };
 
