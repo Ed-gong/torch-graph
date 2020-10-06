@@ -35,7 +35,7 @@ torch::Tensor edge_softmax(snap_t<dst_id_t>* snaph,  const torch::Tensor & effic
     //return the value of each node after gather procedure
     //int output_dim = input_feature.size(1);
     int64_t count = 0;
-    std::map<torch::Tensor, torch::Tensor> mailbox;
+    std::map<int, torch::Tensor> mailbox;
     for (vid_t v = 0; v < v_count; v++) {
         nebr_count = snaph->get_nebrs_out(v, header);
         if (nebr_count == 0) {
@@ -50,9 +50,7 @@ torch::Tensor edge_softmax(snap_t<dst_id_t>* snaph,  const torch::Tensor & effic
             //If mailbox is empty, we initilize the mailbox
             if (mailbox.count(sid) == 0) {
                 //std::cout<<message<<std::endl;
-                torch::Tensor sid_1 = torch::zeros({1,1});
-                sid_1[1] = sid;
-                mailbox[sid_1] = message;
+                mailbox[sid] = message;
                 count = count + 1;
                 continue;
 
@@ -67,12 +65,12 @@ torch::Tensor edge_softmax(snap_t<dst_id_t>* snaph,  const torch::Tensor & effic
     }
 
         //apply softmax for each node
-        for (std::map<torch::Tensor,torch::Tensor>::iterator it = mailbox.begin(); it!= mailbox.end(); ++it){
+        for (std::map<int,torch::Tensor>::iterator it = mailbox.begin(); it!= mailbox.end(); ++it){
                 torch::Tensor edge_id_list = it -> second;
                 int length = edge_id_list.size(0);
                 torch::Tensor original_score = torch::zeros({length,1});
             for (int i = 0; i < length; i++) {
-                int edge_id = edge_id_list[i];
+                int64_t edge_id = edge_id_list[i].item().to<int64_t>();
                 original_score[i] = efficient_score[edge_id];
                 }
             at::Tensor alpha = torch::softmax(original_score, 1);// apply softmax for specific node
@@ -118,7 +116,7 @@ torch::Tensor add_by_edge(snap_t<dst_id_t>* snaph, const torch::Tensor & input_l
             torch::Tensor input_feature_left = input_left[v];
             torch::Tensor input_feature_right = input_right[sid];
             torch::Tensor temp = torch::add(input_feature_left , input_feature_right);
-            message = message.reshape({1, 1});
+            temp = temp.reshape({1, 1});
             result = torch::cat({result, temp}, 0);
             //If mailbox is empty, we initilize the mailbox
 
@@ -399,16 +397,16 @@ public:
 };
 
 
-GATlayer::GATlayer(int64_t in_dim, int64_t out_dim)
+GATlayerImpl::GATlayerImpl(int64_t in_dim, int64_t out_dim)
         : linear1(register_module("linear1", torch::nn::Linear(in_dim, out_dim))) {
-    W_left = register_parameter("W", torch::randn({out_dim, 1}));
-    W_right = register_parameter("W", torch::randn({out_dim, 1}));
+    W_left = register_parameter("W_left", torch::randn({out_dim, 1}));
+    W_right = register_parameter("W_right", torch::randn({out_dim, 1}));
 
-    register_module("linear1", linear1);
+    //register_module("linear1", linear1);
 
 }
 
-torch::Tensor GATlayer::forward(torch::Tensor input, c10::intrusive_ptr<SnapWrap> snaph){
+torch::Tensor GATlayerImpl::forward(torch::Tensor input, c10::intrusive_ptr<SnapWrap> snaph){
 
     torch::Tensor map_input = linear1(input); // equation1
     torch::Tensor input_left = torch::matmul(map_input, W_left);
@@ -428,26 +426,39 @@ torch::Tensor GATlayer::forward(torch::Tensor input, c10::intrusive_ptr<SnapWrap
 
 GAT::GAT(int64_t in_dim, int64_t hidden_dim, int64_t out_dim)
         : gatlayer1(in_dim, hidden_dim), gatlayer2(hidden_dim, out_dim){
+             register_module("gatlayer1", gatlayer1);
+            register_module("gatlayer2", gatlayer2);
 }
 
 torch::Tensor GAT::forward(torch::Tensor input,
                            c10::intrusive_ptr<SnapWrap> snaph)
 {
-    torch:: Tensor h = gatlayer1.forward(input, snaph);
+    torch:: Tensor h = gatlayer1 -> forward(input, snaph);
     h = torch::relu(h);
-    h = gatlayer2.forward(h, snaph);
+    h = gatlayer2 -> forward(h, snaph);
 
     return h;
 }
 
+
 /*
 vector<torch::Tensor> GAT::parameters(){
+    
     std::vector<torch::Tensor> result;
-    torch::Tensor para1 = gatlayer1.W;
-    torch::Tensor para2 = gatlayer2.W;
+    torch::Tensor para1 = gatlayer1.linear1.parameters() ;
+    torch::Tensor para2 = gatlayer2.linear1.parameters() ;
+    torch::Tensor para3 = gatlayer1.W_left;
+    torch::Tensor para4 = gatlayer1.W_right;
+
+    torch::Tensor para5 = gatlayer2.W_left;
+    torch::Tensor para6 = gatlayer2.W_right;
+
     result.push_back(para1);
-    result.push_back (para2);
-    return result;
+    result.push_back(para2);
+    result.push_back(para3);
+    result.push_back(para4);
+    result.push_back(para5);
+    result.push_back(para6);
+    return result; 
 }
 */
-

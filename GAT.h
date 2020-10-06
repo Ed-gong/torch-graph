@@ -25,25 +25,30 @@ using torch::autograd::tensor_list;
 #include "SnapWrap.h"
 #include "ManagerWrap.h"
 
-torch::Tensor gat_result1(const torch::Tensor & input_feature, snap_t<dst_id_t>* snaph, int64_t reverse);
+torch::Tensor gat_result1(const torch::Tensor & input_feature, snap_t<dst_id_t>* snaph, string gather_operator, int64_t reverse);
+torch::Tensor edge_softmax(snap_t<dst_id_t>* snaph,  const torch::Tensor & efficient_score);
+torch::Tensor add_by_edge(snap_t<dst_id_t>* snaph, const torch::Tensor & input_left, const torch::Tensor & input_right);
+torch::Tensor gat_update_all_1(const torch::Tensor & input_feature, snap_t<dst_id_t>* snaph, const torch::Tensor &  edge_score_by_softmax, int64_t reverse);
 
-struct GATlayer : torch::nn::Module {
-        GATlayer(int64_t in_dim, int64_t out_dim);
-        torch::Tensor forward(torch::Tensor input, c10::intrusive_ptr<SnapWrap> snaph);
-        torch::nn::Linear linear1;
-        torch::nn::Linear linear2;
-        //torch::nn::Linear linear;
-        int64_t in_dim;
-        int64_t out_dim;
+struct GATlayerImpl : torch::nn::Module {
+    GATlayerImpl(int64_t in_dim, int64_t out_dim);
+    torch::Tensor forward(torch::Tensor input, c10::intrusive_ptr<SnapWrap> snaph);
+    torch::nn::Linear linear1;
+    torch::Tensor W_left;
+    torch::Tensor W_right;
+    //torch::nn::Linear linear;
+    int64_t in_dim;
+    int64_t out_dim;
 };
-
+TORCH_MODULE(GATlayer);
 
 struct GAT : torch::nn::Module {
     GAT(int64_t in_dim, int64_t hidden_dim, int64_t out_dim);
     torch::Tensor forward(torch::Tensor input, c10::intrusive_ptr<SnapWrap> snaph);
-    vector<torch::Tensor> parameters();
+    //vector<torch::Tensor> parameters();
     GATlayer gatlayer1, gatlayer2;
 };
+
 
 
 
