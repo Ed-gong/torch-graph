@@ -46,7 +46,8 @@ torch::Tensor edge_softmax(snap_t<dst_id_t>* snaph,  const torch::Tensor & effic
             sid = TO_SID(get_sid(header[i]));
             //std::cout << "the sid" <<std::endl;
             torch::Tensor message = torch::zeros({1,1});
-            message[1] = count;
+            message[0] = count;
+            std::cout<<"nani1111"<<std::endl;
             //If mailbox is empty, we initilize the mailbox
             if (mailbox.count(sid) == 0) {
                 //std::cout<<message<<std::endl;
@@ -55,11 +56,14 @@ torch::Tensor edge_softmax(snap_t<dst_id_t>* snaph,  const torch::Tensor & effic
                 continue;
 
             }
+             std::cout<<"nani2222"<<std::endl;
             // If the mailbox is not emptys, we concatenate the received message with the new message
             torch::Tensor temp = torch::cat({mailbox[sid], message}, 0);
             //std::cout<<"kkk"<<std::endl;
             //std::cout << temp<< std::endl;
+            std::cout<<"nani3333"<<std::endl;
             mailbox[sid] = temp;
+            std::cout<<"nani4444"<<std::endl;
             count = count + 1;
         }
     }
@@ -71,12 +75,18 @@ torch::Tensor edge_softmax(snap_t<dst_id_t>* snaph,  const torch::Tensor & effic
                 torch::Tensor original_score = torch::zeros({length,1});
             for (int i = 0; i < length; i++) {
                 int64_t edge_id = edge_id_list[i].item().to<int64_t>();
+                std::cout<<"nani5555"<<std::endl;
                 original_score[i] = efficient_score[edge_id];
                 }
+
             at::Tensor alpha = torch::softmax(original_score, 1);// apply softmax for specific node
             for (int i = 0; i < length; i++) {
-                torch::Tensor edge_id = edge_id_list[i];
+                int64_t edge_id = edge_id_list[i].item().to<int64_t>();
+
+                std::cout<<"nani6666"<<std::endl;
+                std::cout<<edge_id<<std::endl;
                 efficient_score[edge_id] = alpha[i];// update the efficient score
+                 std::cout<<"nani7777"<<std::endl;
             }
             //std::cout<<"aaaa"<<std::endl;
             //std::cout<<temp<<std::endl;
@@ -102,7 +112,23 @@ torch::Tensor add_by_edge(snap_t<dst_id_t>* snaph, const torch::Tensor & input_l
 
     //return the value of each node after gather procedure
     //int output_dim = input_feature.size(1);
-    torch::Tensor result;
+     
+    int edge_count = 0;
+    for (vid_t v = 0; v < v_count; v++) {
+        nebr_count = snaph->get_nebrs_out(v, header);
+        if (nebr_count == 0) {
+            continue;
+        }
+        // the node j scatter it's message to all neighors
+        for (degree_t i = 0; i < nebr_count; ++i) {
+            edge_count = edge_count + 1;
+        }
+    }
+
+
+    torch::Tensor result = torch::zeros({edge_count,1});
+    int count = 0;
+    
 
     for (vid_t v = 0; v < v_count; v++) {
         nebr_count = snaph->get_nebrs_out(v, header);
@@ -116,8 +142,9 @@ torch::Tensor add_by_edge(snap_t<dst_id_t>* snaph, const torch::Tensor & input_l
             torch::Tensor input_feature_left = input_left[v];
             torch::Tensor input_feature_right = input_right[sid];
             torch::Tensor temp = torch::add(input_feature_left , input_feature_right);
-            temp = temp.reshape({1, 1});
-            result = torch::cat({result, temp}, 0);
+            //temp = temp.reshape({1, 1});
+            result[count] = temp;
+            count = count + 1;
             //If mailbox is empty, we initilize the mailbox
 
             //torch::Tensor message = input_feature[sid] * (float)1 / (float) nebr_count;
@@ -128,8 +155,6 @@ torch::Tensor add_by_edge(snap_t<dst_id_t>* snaph, const torch::Tensor & input_l
     return result;
 
 }
-
-
 
 
 torch::Tensor gat_update_all_1(const torch::Tensor & input_feature, snap_t<dst_id_t>* snaph, const torch::Tensor &  edge_score_by_softmax, string gather_operator,  int64_t reverse) {
@@ -205,6 +230,8 @@ torch::Tensor gat_update_all_1(const torch::Tensor & input_feature, snap_t<dst_i
         }
         //std::cout<<"aaaa"<<std::endl;
         //std::cout<<temp<<std::endl;
+        std::cout<< "ceshi" << std::endl;
+
         it->second = temp;
     }
 
@@ -388,11 +415,11 @@ public:
         //auto grad_output = grad_outputs[0];
         int64_t reverse = 1;
         auto grad_graph_snaph = torch::Tensor();
-        auto grad_edge_score_by_softmax = grad_outputs[0] * edge_score_by_softmax;// not sure
+        auto grad_edge_score_by_softmax1 = grad_outputs[2] * edge_score_by_softmax - edge_score_by_softmax;// not sure
         auto grad_input = gat_update_all_1(grad_outputs[0], snaph->snaph, edge_score_by_softmax,"max" ,reverse);
         cout << "grad output1" << endl;
 
-        return {grad_input, grad_graph_snaph, grad_edge_score_by_softmax};
+        return {grad_input, grad_graph_snaph, grad_edge_score_by_softmax1};
     }
 };
 
@@ -409,12 +436,19 @@ GATlayerImpl::GATlayerImpl(int64_t in_dim, int64_t out_dim)
 torch::Tensor GATlayerImpl::forward(torch::Tensor input, c10::intrusive_ptr<SnapWrap> snaph){
 
     torch::Tensor map_input = linear1(input); // equation1
+    std::cout<<"nani?"<< std::endl;
     torch::Tensor input_left = torch::matmul(map_input, W_left);
+    std::cout<<"nani2"<<std::endl;
     torch::Tensor input_right = torch::matmul(map_input, W_right);
+    std::cout<<"nani3"<<std::endl;
     torch::Tensor edge_score = add_by_edge(snaph -> snaph, input_left, input_right);//equation 2 by edge
+    std::cout<<"nani4"<<std::endl;
     torch::Tensor efficient_score = torch::leaky_relu(edge_score, 0.2); // double check
+    std::cout<<"nani5"<<std::endl;
     torch::Tensor edge_score_by_softmax = edge_softmax(snaph -> snaph, efficient_score);//get final significiant for each edge
+    std::cout<<"nani6"<<std::endl;
     torch::Tensor h = GAT_update_all::apply(map_input, snaph, edge_score_by_softmax);
+    std::cout<<"nani7"<<std::endl;
 
 
 
