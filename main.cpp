@@ -1,72 +1,68 @@
-#include <iostream>
-#include <torch/torch.h>
-#include <iostream>
-#include <torch/script.h>
-#include <iostream>
-// This header is what defines the custom class registration
-// behavior specifically. script.h already includes this, but
-// we include it here so you know it exists in case you want
-// to look at the API or implementation.
-//#include <torch/custom_class.h>
-#include <string>
-#include <vector>
-//#include <cstdint>
-using namespace std;
-using torch::Tensor;
-using torch::autograd::Node;
-using torch::autograd::deleteNode;
-using torch::autograd::SavedVariable;
-using torch::autograd::variable_list;
-using torch::autograd::tensor_list;
-
 #include "SnapWrap.h"
 #include "ManagerWrap.h"
 #include "GCN.h"
+#include "GAT.h"
  
-/*
-c10::intrusive_ptr<SnapWrap> get_current_graph(c10::intrusive_ptr<ManagerWrap> manager, 
-                c10::intrusive_ptr<SnapWrap> snaph)
-{
-    snap_t<dst_id_t>* snaph1 = net.get_current_graph(manager->manager,snaph->snaph);
-    return snaph1;
-}*/
+graph* g = new graph();
 
 struct GCNWrap : torch::CustomClassHolder {
-  //plaingraph_manager_t<T>* manager;
-
   GCNWrap(int64_t in_features_dim, int64_t hidden_size, int64_t num_class) 
-  :net(in_features_dim, hidden_size, num_class){
+    :net(in_features_dim, hidden_size, num_class)
+  {
   }
 
-  torch::Tensor forward(torch::Tensor input, c10::intrusive_ptr<SnapWrap> snaph, torch::Tensor weight2, torch::Tensor weight3)
+  torch::Tensor forward(torch::Tensor input, c10::intrusive_ptr<SnapWrap> snaph)
   {   
-      std::cout<<"wu"<<std::endl;
-      torch::Tensor result = net.forward(input, snaph, weight2, weight3);
+      //std::cout<<"wu"<<std::endl;
+      torch::Tensor result = net.forward(input, snaph);
       return result;
   }
 
   vector<torch::Tensor> parameters(){
-    /*
-        for (const auto& p : net.parameters()) {
-            std::cout << p << std::endl;
-        }
-        return net.parameters();
-        */
         vector<torch::Tensor> result = net.parameters();
         return result;
   }
   GCN net; 
 };
 
+
+struct GATWrap : torch::CustomClassHolder {
+  GATWrap(int64_t in_dim, int64_t hidden_dim, int64_t out_dim) 
+    :gat(in_dim, hidden_dim, out_dim){
+  }
+
+  torch::Tensor forward(torch::Tensor input, c10::intrusive_ptr<SnapWrap> snaph)
+  {   
+      torch::Tensor result = gat.forward(input, snaph);
+      return result;
+  }
+
+  vector<torch::Tensor> parameters(){
+      vector<torch::Tensor> result = gat.parameters();
+      return result;
+  }
+
+  GAT gat;
+};
+
+
 TORCH_LIBRARY(my_classes, m) {
   m.class_<SnapWrap>("SnapWrap")
     .def(torch::init<>())
   ;
 
+m.class_<GATWrap>("GATWrap")
+    .def(torch::init<int64_t, int64_t, int64_t>())
+    .def("forward", &GATWrap::forward)
+    .def("parameters",&GATWrap::parameters)
+  ;
+
   m.class_<ManagerWrap>("ManagerWrap")
     .def(torch::init<int64_t, int64_t, string>())
-    .def("create_static_view",&ManagerWrap::create_static_view)
+    .def("create_static_view",&ManagerWrap::reg_static_view)
     .def("scatter_gather", &ManagerWrap::scatter_gather)
+    .def("adj_matrix", &ManagerWrap::check_adjacency_matrix)
+
   ;
   m.class_<GCNWrap>("GCNWrap")
     .def(torch::init<int64_t, int64_t, int64_t>())

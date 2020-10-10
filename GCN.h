@@ -42,8 +42,5 @@ TORCH_MODULE(GraphConv);
 struct GCN : torch::nn::Module {
     GCN(int64_t in_features, int64_t hidden_size, int64_t num_class); 
     torch::Tensor forward(torch::Tensor input, c10::intrusive_ptr<SnapWrap> snaphi);
-    //vector<torch::Tensor> parameters();
-    //snap_t<dst_id_t>* get_current_graph(plaingraph_manager_t<dst_id_t>* manager, snap_t<dst_id_t>* snaph);
-    //c10::intrusive_ptr<SnapWrap>  get_current_graph(plaingraph_manager_t<dst_id_t>* manager, snap_t<dst_id_t>* snaph);
     GraphConv conv1, conv2;
 };

@@ -1,38 +1,12 @@
-#include <iostream>
-#include <torch/torch.h>
-#include <iostream>
-#include <torch/script.h>
-#include <iostream>
-// This header is what defines the custom class registration
-// behavior specifically. script.h already includes this, but
-// we include it here so you know it exists in case you want
-// to look at the API or implementation.
-//#include <torch/custom_class.h>
-#include <string>
-#include <vector>
-//#include <cstdint>
-using namespace std;
-using torch::Tensor;
-using torch::autograd::Node;
-using torch::autograd::deleteNode;
-using torch::autograd::SavedVariable;
-using torch::autograd::variable_list;
-using torch::autograd::tensor_list;
-
 #include "GCN.h"
-#include "ManagerWrap.h"
 
-#include <torch/torch.h>
 using namespace torch::autograd;
-
-
 
 torch::Tensor find_out_degree(snap_t<dst_id_t>* snaph){
     degree_t nebr_count = 0;
     nebr_reader_t<dst_id_t> header;
     vid_t v_count = snaph->get_vcount();
     torch::Tensor degree_list = torch::ones({v_count,1});
-
 
     for (vid_t v = 0; v < v_count; v++) {
         nebr_count = snaph -> get_nebrs_out(v, header);
@@ -137,10 +111,8 @@ GCN::GCN(int64_t in_features, int64_t hidden_size, int64_t num_class)
     std::cout<< "initilize the GCN" << std::endl;
 }
 
-torch::Tensor GCN::forward(torch::Tensor input, 
-                           //snap_t<dst_id_t>* snaph
-                           c10::intrusive_ptr<SnapWrap> snaph
-                           ) 
+torch::Tensor GCN::forward(torch::Tensor input, //snap_t<dst_id_t>* snaph
+                           c10::intrusive_ptr<SnapWrap> snaph) 
 {
     torch:: Tensor h = conv1->forward(input, snaph);
     //std::cout<<"output of first layer"<<std::endl;
@@ -154,20 +126,3 @@ torch::Tensor GCN::forward(torch::Tensor input,
     //std::cout<<h<<std::endl;
     return h;
 }
-
-/*
-vector<torch::Tensor> GCN::parameters(){
-    std::vector<torch::Tensor> result;
-    torch::Tensor para1 = conv1.W;
-    torch::Tensor para2 = conv1.b;
-
-    torch::Tensor para3 = conv2.W;
-    torch::Tensor para4 = conv2.b;
-
-    result.push_back(para1);
-    result.push_back (para2);
-    result.push_back (para3);
-    result.push_back (para4);
-
-    return result;
-}*/
