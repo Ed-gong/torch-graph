@@ -27,7 +27,7 @@ using torch::autograd::tensor_list;
 using namespace torch::autograd;
 #include "GAT.h"
 
-torch::Tensor edge_softmax(snap_t<dst_id_t>* snaph,  const torch::Tensor & efficient_score){
+torch::Tensor edge_softmax_1(snap_t<dst_id_t>* snaph,  const torch::Tensor & efficient_score){
     degree_t nebr_count = 0;
     vid_t sid;
     nebr_reader_t<dst_id_t> header;
@@ -56,7 +56,7 @@ torch::Tensor edge_softmax(snap_t<dst_id_t>* snaph,  const torch::Tensor & effic
                 continue;
 
             }
-             std::cout<<"nani2222"<<std::endl;
+            std::cout<<"nani2222"<<std::endl;
             // If the mailbox is not emptys, we concatenate the received message with the new message
             torch::Tensor temp = torch::cat({mailbox[sid], message}, 0);
             //std::cout<<"kkk"<<std::endl;
@@ -68,29 +68,29 @@ torch::Tensor edge_softmax(snap_t<dst_id_t>* snaph,  const torch::Tensor & effic
         }
     }
 
-        //apply softmax for each node
-        for (std::map<int,torch::Tensor>::iterator it = mailbox.begin(); it!= mailbox.end(); ++it){
-                torch::Tensor edge_id_list = it -> second;
-                int length = edge_id_list.size(0);
-                torch::Tensor original_score = torch::zeros({length,1});
-            for (int i = 0; i < length; i++) {
-                int64_t edge_id = edge_id_list[i].item().to<int64_t>();
-                std::cout<<"nani5555"<<std::endl;
-                original_score[i] = efficient_score[edge_id];
-                }
-
-            at::Tensor alpha = torch::softmax(original_score, 1);// apply softmax for specific node
-            for (int i = 0; i < length; i++) {
-                int64_t edge_id = edge_id_list[i].item().to<int64_t>();
-
-                std::cout<<"nani6666"<<std::endl;
-                std::cout<<edge_id<<std::endl;
-                efficient_score[edge_id] = alpha[i];// update the efficient score
-                 std::cout<<"nani7777"<<std::endl;
-            }
-            //std::cout<<"aaaa"<<std::endl;
-            //std::cout<<temp<<std::endl;
+    //apply softmax for each node
+    for (std::map<int,torch::Tensor>::iterator it = mailbox.begin(); it!= mailbox.end(); ++it){
+        torch::Tensor edge_id_list = it -> second;
+        int length = edge_id_list.size(0);
+        torch::Tensor original_score = torch::zeros({length,1});
+        for (int i = 0; i < length; i++) {
+            int64_t edge_id = edge_id_list[i].item().to<int64_t>();
+            std::cout<<"nani5555"<<std::endl;
+            original_score[i] = efficient_score[edge_id];
         }
+
+        at::Tensor alpha = torch::softmax(original_score, 1);// apply softmax for specific node
+        for (int i = 0; i < length; i++) {
+            int64_t edge_id = edge_id_list[i].item().to<int64_t>();
+
+            std::cout<<"nani6666"<<std::endl;
+            std::cout<<edge_id<<std::endl;
+            efficient_score[edge_id] = alpha[i];// update the efficient score
+            std::cout<<"nani7777"<<std::endl;
+        }
+        //std::cout<<"aaaa"<<std::endl;
+        //std::cout<<temp<<std::endl;
+    }
 
 
 
@@ -112,7 +112,7 @@ torch::Tensor add_by_edge(snap_t<dst_id_t>* snaph, const torch::Tensor & input_l
 
     //return the value of each node after gather procedure
     //int output_dim = input_feature.size(1);
-     
+
     int edge_count = 0;
     for (vid_t v = 0; v < v_count; v++) {
         nebr_count = snaph->get_nebrs_out(v, header);
@@ -128,7 +128,7 @@ torch::Tensor add_by_edge(snap_t<dst_id_t>* snaph, const torch::Tensor & input_l
 
     torch::Tensor result = torch::zeros({edge_count,1});
     int count = 0;
-    
+
 
     for (vid_t v = 0; v < v_count; v++) {
         nebr_count = snaph->get_nebrs_out(v, header);
@@ -255,6 +255,37 @@ torch::Tensor gat_update_all_1(const torch::Tensor & input_feature, snap_t<dst_i
 }
 
 
+class GAT_edge_softmax : public Function<GAT_edge_softmax> {
+public:
+    // Note that both forward and backward are static functions
+
+    // bias is an optional argument
+    static torch::Tensor forward(AutogradContext *ctx, c10::intrusive_ptr<SnapWrap> snaph,  const torch::Tensor & efficient_score) {
+        ctx->save_for_backward({efficient_score});
+        ctx->saved_data["snaph"] = snaph;
+        //ctx->save_for_backward({input, snaph, gather_operator, reverse});
+        auto output = edge_softmax_1(snaph -> snaph, efficient_score);
+        return output;
+    }
+
+    static tensor_list backward(AutogradContext *ctx, auto grad_outputs) {
+        auto saved = ctx->get_saved_variables();
+        auto efficient_score = saved[0];
+        auto snaph = ctx->saved_data["snaph"].toCustomClass<SnapWrap>();
+        //auto grad_output = grad_outputs[0];
+        auto grad_graph_snaph = torch::Tensor();
+        auto grad_efficient_score = grad_outputs[0] * efficient_score - efficient_score;// not sure
+        cout << "grad output1" << endl;
+
+        return {grad_graph_snaph, grad_efficient_score};
+    }
+};
+
+
+
+
+
+
 /*
 torch::Tensor gat_result1(const torch::Tensor & input_feature, snap_t<dst_id_t>* snaph, int64_t reverse, GATlayer * gatlayer2) {
     //snap_t<dst_id_t>* snaph = 0;
@@ -262,22 +293,17 @@ torch::Tensor gat_result1(const torch::Tensor & input_feature, snap_t<dst_id_t>*
     vid_t sid;
     nebr_reader_t<dst_id_t> header;
     int output_dim = input_feature.size(1);
-
     vid_t v_count = snaph->get_vcount();
-
     //return the value of each node after gather procedure
     //int output_dim = input_feature.size(1);
     torch::Tensor result = torch::zeros({v_count,output_dim});
     std::map<int, torch::Tensor> mailbox;
-
     for (vid_t v = 0; v < v_count; v++) {
-
         if (reverse == 1) {
             nebr_count = snaph->get_nebrs_in(v, header);
         } else {
             nebr_count = snaph->get_nebrs_out(v, header);
         }
-
         if (nebr_count == 0){
             continue;
         }
@@ -285,17 +311,16 @@ torch::Tensor gat_result1(const torch::Tensor & input_feature, snap_t<dst_id_t>*
         for (degree_t i = 0; i < nebr_count; ++i) {
             sid = TO_SID(get_sid(header[i]));
             //std::cout << "the sid" <<std::endl;
-
             //If mailbox is empty, we initilize the mailbox
             if (mailbox.count(sid) == 0){
                 //torch::Tensor message = input_feature[sid] * (float)1 / (float) nebr_count;
                 torch::Tensor message = input_feature[sid];
-                
+
                 torch::Tensor temp_message = torch::zeros({1,output_dim});
                 for (int a = 0; a < output_dim; a++){
                     temp_message[1][a] = message[a];
                 }
-            
+
                 //std::cout<<"haaaaa?"<<std::endl;
                 //std::cout<< temp_message << std::endl;
                 message = message.reshape({1,output_dim});
@@ -303,37 +328,28 @@ torch::Tensor gat_result1(const torch::Tensor & input_feature, snap_t<dst_id_t>*
                 //std::cout<<message<<std::endl;
                 mailbox[sid] = message;
                 continue;
-
             }
             // If the mailbox is not emptys, we concatenate the received message with the new message
             //torch::Tensor message = input_feature[sid] * (float)1 / (float) nebr_count;
             torch::Tensor message = input_feature[sid];
-
             message = message.reshape({1, output_dim});
-
             torch::Tensor temp = torch::cat({mailbox[sid], message}, 0);
             //std::cout<<"kkk"<<std::endl;
             //std::cout << temp<< std::endl;
             mailbox[sid] = temp;
         }
     }
-
     torch::Tensor temp;
     for (std::map<int,torch::Tensor>::iterator it = mailbox.begin(); it!= mailbox.end(); ++it){
-
-
         vid_t node_id = it -> first;
         torch::Tensor message = it -> second;
         int num_nebr = input_feature.size(0);
         torch::Tensor node_input = input_feature[node_id];
-
         node_input = node_input.reshape({1,output_dim});
         torch::Tensor temp_append = node_input;
         for (degree_t i = 1; i < num_nebr; ++i) {
             temp_append = torch::cat((temp_append, node_input), 0);
         }
-
-
         // concatenate the node feature with message feature
         temp = torch::cat((message, temp_append), 1);
         torch::Tensor temp = gatlayer2 ->linear2(temp);// equation 2 here
@@ -341,10 +357,8 @@ torch::Tensor gat_result1(const torch::Tensor & input_feature, snap_t<dst_id_t>*
         at::Tensor alpha = torch::softmax(efficient_score, 1);//equation3 here
         //check here.
         torch::Tensor h = torch::sum(alpha * message, 0); // equation (4) weighted sum for that node
-
         it->second = h;
     }
-
     //return the value of each node after gather procedure
     //int output_dim = input_feature.size(1);
     result = torch::zeros({v_count,output_dim});//{v_count, 1} means the tensor is 1 dimension,otherwise, we cannot concatenated tensors
@@ -355,19 +369,13 @@ torch::Tensor gat_result1(const torch::Tensor & input_feature, snap_t<dst_id_t>*
         if (it == mailbox.end()) continue;
         result[v] = mailbox[v];
     }
-
     return result;
-
 }
-
-
 */
 /*
-
 class GAT_result : public Function<GAT_result> {
 public:
     // Note that both forward and backward are static functions
-
     // bias is an optional argument
     static torch::Tensor forward(AutogradContext *ctx, torch::Tensor input,
                                  c10::intrusive_ptr<SnapWrap> snaph, GATlayer * gatlayer2) {
@@ -377,7 +385,6 @@ public:
         auto output = gat_result1(input, snaph -> snaph, 0, gatlayer2);
         return output;
     }
-
     static tensor_list backward(AutogradContext *ctx, auto grad_outputs) {
         auto saved = ctx->get_saved_variables();
         auto input = saved[0];
@@ -387,7 +394,6 @@ public:
         auto grad_graph_snaph = torch::Tensor();
         auto grad_input = gat_result1(grad_outputs[0], snaph->snaph, reverse);//TODO  check here XXX
         cout << "grad output1" << endl;
-
         return {grad_input, grad_graph_snaph};
     }
 };
@@ -403,20 +409,20 @@ public:
         ctx->save_for_backward({input, edge_score_by_softmax});
         ctx->saved_data["snaph"] = snaph;
         //ctx->save_for_backward({input, snaph, gather_operator, reverse});
-        auto output = gat_update_all_1(input, snaph -> snaph, edge_score_by_softmax,"max", 0);
+        auto output = gat_update_all_1(input, snaph -> snaph, edge_score_by_softmax,"sum", 0);
         return output;
     }
 
     static tensor_list backward(AutogradContext *ctx, auto grad_outputs) {
         auto saved = ctx->get_saved_variables();
         auto input = saved[0];
-        auto edge_score_by_softmax = saved[1]; 
+        auto edge_score_by_softmax = saved[1];
         auto snaph = ctx->saved_data["snaph"].toCustomClass<SnapWrap>();
         //auto grad_output = grad_outputs[0];
         int64_t reverse = 1;
         auto grad_graph_snaph = torch::Tensor();
-        auto grad_edge_score_by_softmax1 = grad_outputs[2] * edge_score_by_softmax - edge_score_by_softmax;// not sure
-        auto grad_input = gat_update_all_1(grad_outputs[0], snaph->snaph, edge_score_by_softmax,"max" ,reverse);
+        auto grad_edge_score_by_softmax1 = torch::Tensor();  //grad_outputs[0] * edge_score_by_softmax - edge_score_by_softmax;// not sure
+        auto grad_input = gat_update_all_1(grad_outputs[0], snaph->snaph, edge_score_by_softmax,"sum" ,reverse);
         cout << "grad output1" << endl;
 
         return {grad_input, grad_graph_snaph, grad_edge_score_by_softmax1};
@@ -445,7 +451,7 @@ torch::Tensor GATlayerImpl::forward(torch::Tensor input, c10::intrusive_ptr<Snap
     std::cout<<"nani4"<<std::endl;
     torch::Tensor efficient_score = torch::leaky_relu(edge_score, 0.2); // double check
     std::cout<<"nani5"<<std::endl;
-    torch::Tensor edge_score_by_softmax = edge_softmax(snaph -> snaph, efficient_score);//get final significiant for each edge
+    torch::Tensor edge_score_by_softmax = GAT_edge_softmax::apply(snaph, efficient_score);//get final significiant for each edge
     std::cout<<"nani6"<<std::endl;
     torch::Tensor h = GAT_update_all::apply(map_input, snaph, edge_score_by_softmax);
     std::cout<<"nani7"<<std::endl;
@@ -460,8 +466,8 @@ torch::Tensor GATlayerImpl::forward(torch::Tensor input, c10::intrusive_ptr<Snap
 
 GAT::GAT(int64_t in_dim, int64_t hidden_dim, int64_t out_dim)
         : gatlayer1(in_dim, hidden_dim), gatlayer2(hidden_dim, out_dim){
-             register_module("gatlayer1", gatlayer1);
-            register_module("gatlayer2", gatlayer2);
+    register_module("gatlayer1", gatlayer1);
+    register_module("gatlayer2", gatlayer2);
 }
 
 torch::Tensor GAT::forward(torch::Tensor input,
@@ -477,22 +483,20 @@ torch::Tensor GAT::forward(torch::Tensor input,
 
 /*
 vector<torch::Tensor> GAT::parameters(){
-    
+
     std::vector<torch::Tensor> result;
     torch::Tensor para1 = gatlayer1.linear1.parameters() ;
     torch::Tensor para2 = gatlayer2.linear1.parameters() ;
     torch::Tensor para3 = gatlayer1.W_left;
     torch::Tensor para4 = gatlayer1.W_right;
-
     torch::Tensor para5 = gatlayer2.W_left;
     torch::Tensor para6 = gatlayer2.W_right;
-
     result.push_back(para1);
     result.push_back(para2);
     result.push_back(para3);
     result.push_back(para4);
     result.push_back(para5);
     result.push_back(para6);
-    return result; 
+    return result;
 }
 */
