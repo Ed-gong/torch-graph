@@ -45,31 +45,44 @@ struct GATWrap : torch::CustomClassHolder {
   GAT gat;
 };
 
+template <class T>
+void export_manager(torch::Library &m, std::string typestr) {
+  std::string name = std::string("ManagerWrap") + typestr;
+  m.class_<ManagerWrap_t<T>>(name)
+    .def(torch::init<int64_t, int64_t, string>())
+    .def("create_static_view",&ManagerWrap_t<T>::reg_static_view)
+    .def("scatter_gather", &ManagerWrap_t<T>::scatter_gather)
+    .def("adj_matrix", &ManagerWrap_t<T>::check_adjacency_matrix)
+    ;
+}
 
-TORCH_LIBRARY(my_classes, m) {
-  m.class_<SnapWrap>("SnapWrap")
+template <class T>
+void export_static_view(torch::Library &m, std::string typestr) {
+  std::string name = std::string("SnapWrap") + typestr;
+  m.class_<SnapWrap_t<T>>(name)
     .def(torch::init<>())
   ;
+}
 
-m.class_<GATWrap>("GATWrap")
-    .def(torch::init<int64_t, int64_t, int64_t>())
-    .def("forward", &GATWrap::forward)
-    .def("parameters",&GATWrap::parameters)
-  ;
+TORCH_LIBRARY(my_classes, m) {
+  export_static_view<dst_id_t>(m, "");
+  export_static_view<weight_sid_t>(m, "W");
 
-  m.class_<ManagerWrap>("ManagerWrap")
-    .def(torch::init<int64_t, int64_t, string>())
-    .def("create_static_view",&ManagerWrap::reg_static_view)
-    .def("scatter_gather", &ManagerWrap::scatter_gather)
-    .def("adj_matrix", &ManagerWrap::check_adjacency_matrix)
+  export_manager<dst_id_t>(m, "");
+  export_manager<weight_sid_t>(m, "W");
 
-  ;
   m.class_<GCNWrap>("GCNWrap")
     .def(torch::init<int64_t, int64_t, int64_t>())
     .def("forward", &GCNWrap::forward)
     .def("parameters",&GCNWrap::parameters)
     //.def("get_current_graph",&GCNWrap::get_current_graph)
   ;
+  m.class_<GATWrap>("GATWrap")
+    .def(torch::init<int64_t, int64_t, int64_t>())
+    .def("forward", &GATWrap::forward)
+    .def("parameters",&GATWrap::parameters)
+  ;
+
   //m.class_<ManagerWrap<int64_t>>("ManagerWrap")
     // The following line registers the contructor of our MyStackClass
     // class that takes a single `std::vector<std::string>` argument,
