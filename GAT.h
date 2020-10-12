@@ -26,9 +26,10 @@ using torch::autograd::tensor_list;
 #include "ManagerWrap.h"
 
 torch::Tensor gat_result1(const torch::Tensor & input_feature, snap_t<dst_id_t>* snaph, string gather_operator, int64_t reverse);
-torch::Tensor edge_softmax_1(snap_t<dst_id_t>* snaph,  const torch::Tensor & efficient_score);
+//torch::Tensor edge_softmax_1(snap_t<dst_id_t>* snaph,  const torch::Tensor & efficient_score);
 torch::Tensor add_by_edge(snap_t<dst_id_t>* snaph, const torch::Tensor & input_left, const torch::Tensor & input_right);
-torch::Tensor gat_update_all_1(const torch::Tensor & input_feature, snap_t<dst_id_t>* snaph, const torch::Tensor &  edge_score_by_softmax, int64_t reverse);
+torch::Tensor gat_update_by_edge1(const torch::Tensor & input_left, snap_t<dst_id_t>* snaph, const torch::Tensor & input_right, string oper, int64_t reverse);
+torch::Tensor gat_update_all_vertix1(const torch::Tensor & input_feature, snap_t<dst_id_t>* snaph, const torch::Tensor &  edge_score_by_softmax, string gather_operator,  int64_t reverse);
 
 struct GATlayerImpl : torch::nn::Module {
     GATlayerImpl(int64_t in_dim, int64_t out_dim);
