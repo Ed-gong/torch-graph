@@ -25,21 +25,28 @@ public:
     // bias is an optional argument
     static torch::Tensor forward(AutogradContext *ctx, torch::Tensor input, 
                         c10::intrusive_ptr<SnapWrap> snaph,
-                        //snap_t<dst_id_t>* snaph, 
                         string gather_operator) {
-        ctx->save_for_backward({input});
+        //ctx->save_for_backward({input});
         ctx->saved_data["snaph"] = snaph;
         ctx->saved_data["gather_operator"] = gather_operator;
 
         //ctx->save_for_backward({input, snaph, gather_operator, reverse});
-        auto output = scatter_gather1(snaph->snaph, input, gather_operator, 0);
+        
+        int dim = input.size(0);
+        int output_dim = input.size(1);
+        array2d_t<float> input_array(input.data_ptr<float>(), dim, output_dim);
+        
+        torch::Tensor result = torch::zeros({dim, output_dim});
+        array2d_t<float> output_array(result.data_ptr<float>(), dim, output_dim);
+        
+        scatter_gather1(snaph->snaph, input_array, output_array, gather_operator, 0);
 
-        return output;
+        return result;
     }
 
     static tensor_list backward(AutogradContext *ctx, auto grad_outputs) {
-        auto saved = ctx->get_saved_variables();
-        auto input = saved[0];
+        //auto saved = ctx->get_saved_variables();
+        //auto input = saved[0];
         auto snaph = ctx->saved_data["snaph"].toCustomClass<SnapWrap>();
         string gather_operator = ctx->saved_data["gather_operator"].toStringRef();
         //auto grad_output = grad_outputs[0];
@@ -49,11 +56,21 @@ public:
         //auto grad_input = grad_output.sum(0);
         auto grad_graph_snaph = torch::Tensor();
         auto grad_gather_operator = torch::Tensor();
-        auto grad_input = scatter_gather1(snaph->snaph, grad_outputs[0], gather_operator, reverse);
+       
+        torch::Tensor input = grad_outputs[0];
+        int dim = input.size(0);
+        int output_dim = input.size(1);
+        array2d_t<float> input_array(input.data_ptr<float>(), dim, output_dim);
+        
+        torch::Tensor result = torch::zeros({dim, output_dim});
+        array2d_t<float> output_array(result.data_ptr<float>(), dim, output_dim);
+        
+        
+        scatter_gather1(snaph->snaph, input_array, output_array, gather_operator, reverse);
         //cout << "grad output1" << endl;
         //cout << grad_input << endl;
 
-        return {grad_input, grad_graph_snaph, grad_gather_operator};
+        return {result, grad_graph_snaph, grad_gather_operator};
     }
 };
 
@@ -73,17 +90,15 @@ torch::Tensor GraphConvImpl::forward(torch::Tensor input, c10::intrusive_ptr<Sna
     /*
     if (N > M) {
     //mult W first to reduce the feature size for aggregation
-
         //input = torch::matmul(input, W);
         dst_data = torch::matmul(input, W);
         //dst_data = scatter_gather1(snaph, input, "sum");
-    }
-    else {
+    } else {
         //aggregate first then mult W
         //dst_data = scatter_gather1(snaph, input, "sum");
         dst_data = torch::matmul(dst_data, W);
-
     }*/
+    
     //cout << "input to layer matmul" << endl;
     //cout << input << endl;
     torch::Tensor degree_list = find_out_degree(snaph->snaph);

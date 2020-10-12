@@ -23,38 +23,7 @@
 #include "graph.h"
 #include "plain_to_edge.h"
 #include "graph_view.h"
-#include "SnapWrap.h"
-
-
-#ifndef _OPENMP
-#define _OPENMP
-#endif
-//#include <ATen/ParallelOpenMP.h>
-#include <ATen/Parallel.h>
-
-using namespace std;
-using torch::Tensor;
-using torch::autograd::Node;
-using torch::autograd::deleteNode;
-using torch::autograd::SavedVariable;
-using torch::autograd::variable_list;
-using torch::autograd::tensor_list;
-
-//2D tensor
-template <class T>
-struct ltensor {
-    T* ptr;
-    int stride;
-    int size;
-    T* operator[] (int64_t index) {
-        return ptr + stride*index;
-    }
-};
-
-template <class T>
-torch::Tensor scatter_gather1(snap_t<T>* snaph, 
-                             const torch::Tensor & input_feature, 
-                             string gather_operator, int64_t reverse);
+#include "Scatter_gather.h"
 
 template <class T>
 torch::Tensor scatter_gather2(snap_t<T>* snaph,
@@ -101,53 +70,6 @@ torch::Tensor check_adjacency_matrix1(snap_t<T>* snaph)
     return adj_matrix;
 }
     
-
-template <class T>
-torch::Tensor scatter_gather1(snap_t<T>* snaph, 
-                             const torch::Tensor & input_feature, 
-                             string gather_operator, int64_t reverse)
-{
-    int output_dim = input_feature.size(1);
-    vid_t v_count = snaph->get_vcount();
-
-    //auto input_accessor = input_feature.accessor<float,2>();
-    torch::Tensor result = torch::zeros({v_count, output_dim});
-    float* ptr = result.data_ptr<float>();
-    
-    //Start of parallelism
-    at::parallel_for(0, v_count, 0, [&](int64_t start, int64_t end) {
-    for (vid_t v = start; v < end; v++)
-    //for (vid_t v = 0; v < v_count; v++) 
-    { 
-        degree_t nebr_count = 0;
-        vid_t sid;
-        nebr_reader_t<T> header;
-        if (reverse == 0) {
-            nebr_count = snaph->get_nebrs_in(v, header);
-        } else {
-            nebr_count = snaph->get_nebrs_out(v, header);
-        }
-        // if one node do not have any neighbor, we do not scatter it's message
-        if (nebr_count == 0) {
-            //result[v] = input_feature[v];
-            continue; 
-        }
-        
-        // the node j scatter it's message to all neighors
-        //torch::Tensor message = input_feature[v]; //using self loop
-        torch::Tensor message = torch::zeros(output_dim); // don't want to use self loop
-        for (degree_t i = 0; i < nebr_count; ++i) {
-            sid = TO_SID(get_sid(header[i]));
-            message += input_feature[sid];
-            //fn_ptr(message, input_feature[sid]);//first argument is by reference
-        }
-        memcpy(ptr + v*output_dim, message.data_ptr<float>(), 
-               sizeof(float)*output_dim);//in-place error when using mutliple threads TODO 
-    }
-    });//end of parallelism
-
-    return result;
-}
 
 template <class T>
 torch::Tensor scatter_gather2(snap_t<T>* snaph, 
@@ -260,19 +182,24 @@ template <class T>
 ManagerWrap_t<T>::ManagerWrap_t(int64_t flags, int64_t node_number, string path)  {
     manager = new plaingraph_manager_t<T>();
 
-    std::cout << "-> initilize the DAG!!" << std::endl;
+    std::cout << "-> Create in-Memory Graph !!" << std::endl;
     manager -> schema(flags);
-    //manager -> setup_graph(100);
     manager -> setup_graph(node_number);
-    //manager -> prep_graph("/home/datalab/data/test1","");
     manager -> prep_graph(path,"");
 }
 
 template <class T>
-torch::Tensor ManagerWrap_t<T>::scatter_gather(const torch::Tensor & input_feature, string gather_operator,
+torch::Tensor ManagerWrap_t<T>::scatter_gather(const torch::Tensor & input, string gather_operator,
                                           c10::intrusive_ptr<SnapWrap_t<T>> snaph, int64_t reverse)
 {
-    torch::Tensor result = scatter_gather1(snaph->snaph, input_feature, gather_operator, reverse);
+    int dim = input.size(0);
+    int output_dim = input.size(1);
+    array2d_t<float> input_array(input.data_ptr<float>(), dim, output_dim);
+    
+    torch::Tensor result = torch::zeros({dim, output_dim});
+    array2d_t<float> output_array(result.data_ptr<float>(), dim, output_dim);
+    
+    scatter_gather1(snaph->snaph, input_array, output_array, gather_operator, reverse);
     return result;
 }
 

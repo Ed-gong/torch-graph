@@ -13,11 +13,11 @@ include_directories("${GONE_DIR}/src"
                     "${GONE_DIR}/analytics"
 	)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DB32 -DOVER_COOMIT -DPLAIN_GRAPH -DTBB -DDEL -DSDEL -DCOMPACTION -fopenmp"
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O0 -DB32 -DOVER_COOMIT -DPLAIN_GRAPH -DTBB -DDEL -DSDEL -DCOMPACTION -fopenmp"
 )
 
 # Define our library target
-add_library(dcgan SHARED  main.cpp GCN.h GCN.cpp ManagerWrap.h SnapWrap.h GAT.h GAT.cpp)
+add_library(dcgan SHARED  main.cpp GCN.h GCN.cpp ManagerWrap.h SnapWrap.h GAT.h GAT.cpp Scatter_gather.h)
 #add_library(dcgan SHARED  main.cpp GCN.h GCN.cpp ManagerWrap.h ManagerWrap.cpp SnapWrap.h SnapWrap.cpp Scatter_gather.h Scatter_gather.cpp)
 
 
