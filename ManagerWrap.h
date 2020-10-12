@@ -25,6 +25,13 @@
 #include "graph_view.h"
 #include "SnapWrap.h"
 
+
+#ifndef _OPENMP
+#define _OPENMP
+#endif
+//#include <ATen/ParallelOpenMP.h>
+#include <ATen/Parallel.h>
+
 using namespace std;
 using torch::Tensor;
 using torch::autograd::Node;
@@ -32,6 +39,17 @@ using torch::autograd::deleteNode;
 using torch::autograd::SavedVariable;
 using torch::autograd::variable_list;
 using torch::autograd::tensor_list;
+
+//2D tensor
+template <class T>
+struct ltensor {
+    T* ptr;
+    int stride;
+    int size;
+    T* operator[] (int64_t index) {
+        return ptr + stride*index;
+    }
+};
 
 template <class T>
 torch::Tensor scatter_gather1(snap_t<T>* snaph, 
@@ -89,20 +107,21 @@ torch::Tensor scatter_gather1(snap_t<T>* snaph,
                              const torch::Tensor & input_feature, 
                              string gather_operator, int64_t reverse)
 {
-    degree_t nebr_count = 0;
-    vid_t sid;
-    nebr_reader_t<T> header;
     int output_dim = input_feature.size(1);
-    
     vid_t v_count = snaph->get_vcount();
 
-    //int output_dim = input_feature.size(1);
+    //auto input_accessor = input_feature.accessor<float,2>();
     torch::Tensor result = torch::zeros({v_count, output_dim});
-    //torch::Tensor message;
-    //{v_count, 1} means the tensor is 1 dimension,otherwise, we cannot concatenated tensors
-
-    //#pragma omp parallel for num_threads(THD_COUNT)   
-    for (vid_t v = 0; v < v_count; v++) {
+    float* ptr = result.data_ptr<float>();
+    
+    //Start of parallelism
+    at::parallel_for(0, v_count, 0, [&](int64_t start, int64_t end) {
+    for (vid_t v = start; v < end; v++)
+    //for (vid_t v = 0; v < v_count; v++) 
+    { 
+        degree_t nebr_count = 0;
+        vid_t sid;
+        nebr_reader_t<T> header;
         if (reverse == 0) {
             nebr_count = snaph->get_nebrs_in(v, header);
         } else {
@@ -122,10 +141,10 @@ torch::Tensor scatter_gather1(snap_t<T>* snaph,
             message += input_feature[sid];
             //fn_ptr(message, input_feature[sid]);//first argument is by reference
         }
-        //if (nebr_count) { result[v] = message/nebr_count;
-        //} else { }
-        result[v] = message; 
+        memcpy(ptr + v*output_dim, message.data_ptr<float>(), 
+               sizeof(float)*output_dim);//in-place error when using mutliple threads TODO 
     }
+    });//end of parallelism
 
     return result;
 }
