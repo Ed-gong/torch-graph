@@ -2,7 +2,13 @@
 #include "ManagerWrap.h"
 #include "GCN.h"
 #include "GAT.h"
- 
+
+
+short CorePin(int id)
+{
+    return 0;
+}
+
 graph* g = new graph();
 
 struct GCNWrap : torch::CustomClassHolder {

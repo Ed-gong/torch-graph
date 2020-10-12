@@ -96,14 +96,12 @@ torch::Tensor scatter_gather1(snap_t<T>* snaph,
     
     vid_t v_count = snaph->get_vcount();
 
-    //return the value of each node after gather procedure
     //int output_dim = input_feature.size(1);
-    torch::Tensor result = torch::zeros({v_count,output_dim});
+    torch::Tensor result = torch::zeros({v_count, output_dim});
+    //torch::Tensor message;
     //{v_count, 1} means the tensor is 1 dimension,otherwise, we cannot concatenated tensors
 
-    //std::cout << "-> gather procedure begins" << (int) reverse << std::endl;
-
-    #pragma omp parallel for num_threads(THD_COUNT)   
+    //#pragma omp parallel for num_threads(THD_COUNT)   
     for (vid_t v = 0; v < v_count; v++) {
         if (reverse == 0) {
             nebr_count = snaph->get_nebrs_in(v, header);
@@ -111,17 +109,22 @@ torch::Tensor scatter_gather1(snap_t<T>* snaph,
             nebr_count = snaph->get_nebrs_out(v, header);
         }
         // if one node do not have any neighbor, we do not scatter it's message
-        if (nebr_count == 0){
-                continue;
+        if (nebr_count == 0) {
+            //result[v] = input_feature[v];
+            continue; 
         }
+        
         // the node j scatter it's message to all neighors
-        torch::Tensor message = input_feature[v]; //using self loop
-        //torch::Tensor message = Tensor(F); // don't want to use self loop
+        //torch::Tensor message = input_feature[v]; //using self loop
+        torch::Tensor message = torch::zeros(output_dim); // don't want to use self loop
         for (degree_t i = 0; i < nebr_count; ++i) {
             sid = TO_SID(get_sid(header[i]));
+            message += input_feature[sid];
             //fn_ptr(message, input_feature[sid]);//first argument is by reference
         }
-        result[v] = message;///nebr_count;
+        //if (nebr_count) { result[v] = message/nebr_count;
+        //} else { }
+        result[v] = message; 
     }
 
     return result;

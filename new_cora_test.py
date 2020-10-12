@@ -184,9 +184,9 @@ def accuracy(output, labels):
     #correct = correct.sum()
     correct = 0
     predict = torch.max(output, 1).indices
-    print("emmmm?")
-    print(predict)
-    print(labels)
+    #print("emmmm?")
+    #print(predict)
+    #print(labels)
     for i in range(len(labels)):
         if (predict[i] == labels[i]):
             correct = correct + 1
@@ -256,19 +256,19 @@ if __name__ == "__main__":
     # train the network
     optimizer = torch.optim.Adam(itertools.chain(net.parameters()), lr = 0.01, weight_decay = 5e-4)
     all_logits = []
-    for epoch in range(2):
-        print("ai")
+    for epoch in range(2000):
+        # print("ai")
         #print(input_train.size())
         #logits = net.forward(input_X, manager)
         logits = net.forward(input_X, manager)
 
-        print("hu")
+        # print("hu")
         # we save the logits for visualization later
         all_logits.append(logits.detach())
         logp = F.log_softmax(logits, 1)
         #print (logp)
         # we only compute loss for labeled nodes
-        print("ha??")
+        # print("ha??")
         #print(logp[labeled_nodes_train])
 
         loss = F.nll_loss(logp[labeled_nodes_train], labels[labeled_nodes_train])

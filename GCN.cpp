@@ -32,7 +32,7 @@ public:
         ctx->saved_data["gather_operator"] = gather_operator;
 
         //ctx->save_for_backward({input, snaph, gather_operator, reverse});
-        auto output = scatter_gather2(snaph->snaph, input, gather_operator, 0);
+        auto output = scatter_gather1(snaph->snaph, input, gather_operator, 0);
 
         return output;
     }
@@ -49,7 +49,7 @@ public:
         //auto grad_input = grad_output.sum(0);
         auto grad_graph_snaph = torch::Tensor();
         auto grad_gather_operator = torch::Tensor();
-        auto grad_input = scatter_gather2(snaph->snaph, grad_outputs[0], gather_operator, reverse);
+        auto grad_input = scatter_gather1(snaph->snaph, grad_outputs[0], gather_operator, reverse);
         //cout << "grad output1" << endl;
         //cout << grad_input << endl;
 
