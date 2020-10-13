@@ -101,17 +101,21 @@ torch::Tensor GraphConvImpl::forward(torch::Tensor input, c10::intrusive_ptr<Sna
     
     //cout << "input to layer matmul" << endl;
     //cout << input << endl;
-    torch::Tensor degree_list = find_out_degree(snaph->snaph);
+
+
+    //Noramlization has moved to spmm
+    /*torch::Tensor degree_list = find_out_degree(snaph->snaph);
     int num_dim = degree_list.size(0);
     degree_list = degree_list.reshape({num_dim, 1});
     torch::Tensor norm = torch::pow(degree_list, -0.5);
-    input = input * norm;
+    input = input * norm;*/
+
 
     torch::Tensor input1 = torch::matmul(input, W);
     //cout << "output of layer matmul" << endl;
     //cout << input1 << endl;
-    dst_data = Scatter_gather::apply(input1, snaph, "sum");// "0" represent there is no reverse here.
-    dst_data = dst_data * norm; // we apply 'both'as the norm, so we need to apply it twice
+    dst_data = Scatter_gather::apply(input1, snaph, "sum");
+    //dst_data = dst_data * norm; // we apply 'both'as the norm, so we need to apply it twice
 
     dst_data += b;
     return dst_data;

@@ -59,12 +59,13 @@ torch::Tensor check_adjacency_matrix1(snap_t<T>* snaph)
 
     for (vid_t v = 0; v < v_count; v++) {
         nebr_count = snaph -> get_nebrs_out(v, header);
+        //cout << "Vertex ID: " << v << endl;
         for (degree_t i = 0; i < nebr_count; ++i) {
             sid = TO_SID(get_sid(header[i]));
-            std::cout << "weisheme" <<std::endl;
-            std::cout << sid << std::endl;
+            //std::cout << sid << ",";
             adj_matrix[v][sid] = 1;
         }
+        //cout << endl;
     }
 
     return adj_matrix;

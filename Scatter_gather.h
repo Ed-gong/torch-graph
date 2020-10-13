@@ -40,12 +40,11 @@ struct array2d_t {
         T* row_ptr = data_ptr + col_count*index;
         memcpy(row_ptr, ptr, col_count*sizeof(T)); 
     }
-    void row_copy_norm(T* ptr, int64_t index, float degree) {
+    void row_copy_norm(T* ptr, int64_t index, int degree) {
         T* row_ptr = data_ptr + col_count*index;
         for (int64_t i = 0; i < col_count; ++i) {
             row_ptr[i] = ptr[i]/degree;
         }
-        memcpy(row_ptr, ptr, col_count*sizeof(T));
     }
     void row_add(T* ptr, int64_t index) {
         T* row_ptr = data_ptr + col_count*index;
@@ -90,10 +89,23 @@ struct array1d_t {
 
 template <class T>
 void scatter_gather1(snap_t<T>* snaph, array2d_t<float> & input, array2d_t<float> & output, 
-                     string gather_operator, int64_t reverse)
+                     string gather_operator, int64_t reverse, bool norm = true)
 {
     vid_t v_count = snaph->get_vcount();
     int output_dim = input.col_count;
+
+    //If in backward, normalize it first
+    if (reverse == 1 && norm == true) {
+        at::parallel_for(0, v_count, 0, [&](int64_t start, int64_t end) {
+        for (vid_t v = start; v < end; v++) {
+            degree_t degree = snaph->get_degree_in(v);
+            if (degree > 1) {
+                input.row_normalize(v, degree); 
+            }
+        }
+        });
+    }
+    
     
     //Start of parallelism
     at::parallel_for(0, v_count, 0, [&](int64_t start, int64_t end) {
@@ -101,12 +113,15 @@ void scatter_gather1(snap_t<T>* snaph, array2d_t<float> & input, array2d_t<float
     //for (vid_t v = 0; v < v_count; v++) 
     { 
         degree_t nebr_count = 0;
+        degree_t degree = 0;
         vid_t sid;
         nebr_reader_t<T> header;
         if (reverse == 0) {
             nebr_count = snaph->get_nebrs_in(v, header);
+            degree = snaph->get_degree_out(v);
         } else {
             nebr_count = snaph->get_nebrs_out(v, header);
+            degree = snaph->get_degree_in(v);
         }
         // if one node do not have any neighbor, we do not scatter it's message
         if (nebr_count == 0) {
@@ -121,7 +136,14 @@ void scatter_gather1(snap_t<T>* snaph, array2d_t<float> & input, array2d_t<float
             sid = TO_SID(get_sid(header[i]));
             message.add(input[sid]);
         }
-        output.row_copy(message.data_ptr, v);
+        //output.row_copy(message.data_ptr, v);
+        //If in forward, normalize it now.
+        if (degree > 1 && reverse ==0 && norm == true) {
+            output.row_copy_norm(message.data_ptr, v, degree);
+        } else {
+            output.row_copy(message.data_ptr, v);
+        }
+    
     }
     });//end of parallelism
 }
