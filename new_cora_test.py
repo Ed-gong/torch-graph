@@ -203,14 +203,14 @@ if __name__ == "__main__":
     # the features have 5 dimensions
     net = torch.classes.my_classes.GCNWrap(input_feature_dim, 16, 7)
     manager1 = torch.classes.my_classes.ManagerWrap(0, num_node, graph_data_path)
-    manager = torch.classes.my_classes.SnapWrap()
-    manager1.create_static_view(manager)
+    gview = torch.classes.my_classes.SnapWrap()
+    manager1.create_static_view(gview)
 
-    adjacency_matrix = manager1.adj_matrix(manager)
-    print("wuhule")
-    print (adjacency_matrix)
-    print("adj_matrix")
-    torch.save(adjacency_matrix, 'file_cora_torch_0.pt') 
+    #adjacency_matrix = manager1.adj_matrix(gview)
+    #print("wuhule")
+    #print (adjacency_matrix)
+    #print("adj_matrix")
+    #torch.save(adjacency_matrix, 'file_cora_torch_0.pt') 
 
 
     #print ("1111")
@@ -234,7 +234,7 @@ if __name__ == "__main__":
     #input_X = normalize(input_X)
     #input_X = torch.tensor(input_X)
     #output_train_label_encoded = encode_label(output_train, class_label_list)
-    print("train_label")
+    #print("train_label")
     #print(output_train_label_encoded)
     #output_test_label_encoded = encode_label(output_test, class_label_list)
 
@@ -247,7 +247,7 @@ if __name__ == "__main__":
     labeled_nodes_test = torch.tensor(test_idx)  # only the instructor and the president nodes are labeled
     #labels_test = torch.tensor(output_test_label_encoded)  # their labels are different
 
-    print("shazi")
+    #print("shazi")
     #print(labels_train.size())
     #print(len(output_test_label_encoded))
     #print(len(test_idx))
@@ -256,11 +256,11 @@ if __name__ == "__main__":
     # train the network
     optimizer = torch.optim.Adam(itertools.chain(net.parameters()), lr = 0.01, weight_decay = 5e-4)
     all_logits = []
-    for epoch in range(2000):
+    for epoch in range(200):
         # print("ai")
         #print(input_train.size())
-        #logits = net.forward(input_X, manager)
-        logits = net.forward(input_X, manager)
+        #logits = net.forward(input_X, gview)
+        logits = net.forward(input_X, gview)
 
         # print("hu")
         # we save the logits for visualization later
@@ -281,7 +281,7 @@ if __name__ == "__main__":
         print('Epoch %d | Train_Loss: %.4f' % (epoch, loss.item()))
 
         # check the accuracy for test data
-        logits_test = net.forward(input_X, manager)
+        logits_test = net.forward(input_X, gview)
         logp_test = F.log_softmax(logits_test, 1)
 
         acc_val = accuracy(logp_test[labeled_nodes_test], labels[labeled_nodes_test])
