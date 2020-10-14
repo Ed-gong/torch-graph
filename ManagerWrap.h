@@ -218,7 +218,7 @@ void ManagerWrap_t<T>::reg_static_view(c10::intrusive_ptr<SnapWrap_t<T>> snaph)
     snaph->snaph = create_static_view(pgraph_1, 1);//1 means it is a direct graph
     
     //TODO: Comment it out later.
-    std::cout<<"print the graph info"<<std::endl;
+    /*std::cout<<"print the graph info"<<std::endl;
     snap_t<T>* h = snaph->snaph;
     degree_t nebr_count = 0;
     vid_t sid;
@@ -232,7 +232,7 @@ void ManagerWrap_t<T>::reg_static_view(c10::intrusive_ptr<SnapWrap_t<T>> snaph)
             std::cout << TO_SID(get_sid(header[i])) << ",";
         }
         std::cout << std::endl;
-    }
+    }*/
 }
 
 typedef ManagerWrap_t<dst_id_t> ManagerWrap;
