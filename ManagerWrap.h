@@ -35,7 +35,7 @@ torch::Tensor check_adjacency_matrix1(snap_t<T>* snaph);
 
 template<class T>
 struct ManagerWrap_t : torch::CustomClassHolder {
-    plaingraph_manager_t<T>* manager;
+    pgraph_manager_t<T>* manager;
 
     ManagerWrap_t(int64_t flags, int64_t node_number, string path);
 
@@ -181,7 +181,7 @@ torch::Tensor scatter_gather2(snap_t<T>* snaph,
 
 template <class T>
 ManagerWrap_t<T>::ManagerWrap_t(int64_t flags, int64_t node_number, string path)  {
-    manager = new plaingraph_manager_t<T>();
+    manager = new pgraph_manager_t<T>();
 
     std::cout << "-> Create in-Memory Graph !!" << std::endl;
     manager -> schema(flags);
