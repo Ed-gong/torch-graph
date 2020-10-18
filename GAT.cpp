@@ -110,17 +110,15 @@ torch::Tensor add_by_edge(snap_t<dst_id_t>* snaph, const torch::Tensor & input_l
     //int output_dim = input_feature.size(1);
 
     int edge_count = 0;
-    for (vid_t v = 0; v < v_count; v++) {
-        nebr_count = snaph->get_nebrs_out(v, header);
-        if (nebr_count == 0) {
-            continue;
-        }
-        // the node j scatter it's message to all neighors
-        for (degree_t i = 0; i < nebr_count; ++i) {
-            edge_count = edge_count + 1;
-        }
+    /*for (vid_t v = 0; v < v_count; v++) {
+        nebr_count = snaph->get_degree_out(v);
+        edge_count = edge_count + nebr_count;
+    }*/
+    if (snaph->is_udir()) {
+        edge_count = _edge_count << 1;
+    } else {
+        edge_count = _edge_count;
     }
-
 
     torch::Tensor result = torch::zeros({edge_count,1});
     int count = 0;
@@ -128,10 +126,7 @@ torch::Tensor add_by_edge(snap_t<dst_id_t>* snaph, const torch::Tensor & input_l
 
     for (vid_t v = 0; v < v_count; v++) {
         nebr_count = snaph->get_nebrs_out(v, header);
-        if (nebr_count == 0) {
-            continue;
-        }
-        // the node j scatter it's message to all neighors
+        
         for (degree_t i = 0; i < nebr_count; ++i) {
             sid = TO_SID(get_sid(header[i]));
             //std::cout << "the sid" <<std::endl;
@@ -141,15 +136,11 @@ torch::Tensor add_by_edge(snap_t<dst_id_t>* snaph, const torch::Tensor & input_l
             //temp = temp.reshape({1, 1});
             result[count] = temp;
             count = count + 1;
-            //If mailbox is empty, we initilize the mailbox
-
-            //torch::Tensor message = input_feature[sid] * (float)1 / (float) nebr_count;
-
-
         }
     }
-    return result;
 
+    assert(count == edge_count);
+    return result;
 }
 
 
@@ -180,7 +171,7 @@ torch::Tensor gat_update_by_edge1(const torch::Tensor & input_left, snap_t<dst_i
             //std::cout << "the sid" <<std::endl;
             torch::Tensor message = torch::zeros({1,1});
             message[0] = count;
-            std::cout<<"nani1111"<<std::endl;
+            //std::cout<<"nani1111"<<std::endl;
             //If mailbox is empty, we initilize the mailbox
             if (mailbox.count(sid) == 0) {
                 //std::cout<<message<<std::endl;
@@ -189,14 +180,14 @@ torch::Tensor gat_update_by_edge1(const torch::Tensor & input_left, snap_t<dst_i
                 continue;
 
             }
-            std::cout<<"nani2222"<<std::endl;
+            //std::cout<<"nani2222"<<std::endl;
             // If the mailbox is not emptys, we concatenate the received message with the new message
             torch::Tensor temp = torch::cat({mailbox[sid], message}, 0);
             //std::cout<<"kkk"<<std::endl;
             //std::cout << temp<< std::endl;
-            std::cout<<"nani3333"<<std::endl;
+            //std::cout<<"nani3333"<<std::endl;
             mailbox[sid] = temp;
-            std::cout<<"nani4444"<<std::endl;
+            //std::cout<<"nani4444"<<std::endl;
             count = count + 1;
         }
     }
@@ -209,7 +200,7 @@ torch::Tensor gat_update_by_edge1(const torch::Tensor & input_left, snap_t<dst_i
         torch::Tensor original_score = torch::zeros({length,1});
         for (int i = 0; i < length; i++) {
             int64_t edge_id = edge_id_list[i].item().to<int64_t>();
-            std::cout<<"nani5555"<<std::endl;
+            //std::cout<<"nani5555"<<std::endl;
             original_score[i] = input_right[edge_id];
         }
 
@@ -218,35 +209,27 @@ torch::Tensor gat_update_by_edge1(const torch::Tensor & input_left, snap_t<dst_i
             int64_t edge_id = edge_id_list[i].item().to<int64_t>();
             torch::Tensor result_score = torch::zeros({1,1});
 
-            if (oper == "div"){
+            if (oper == "div") {
                 result_score = original_score[i] / input_left[node_id];
-            }
-            else if (oper == "sub") {
+            } else if (oper == "sub") {
                 result_score = original_score[i] - input_left[node_id];
-
-            } else if (oper == "add"){
+            } else if (oper == "add") {
                 result_score = original_score[i] + input_left[node_id];
-
-
-            }else if (oper == "mul"){
+            } else if (oper == "mul"){
                 result_score = original_score[i] * input_left[node_id];
-            }else{
+            } else {
                 result_score = original_score[i];
             }
 
-//            std::cout<<"nani6666"<<std::endl;
-//            std::cout<<edge_id<<std::endl;
+//          std::cout<<"nani6666"<<std::endl;
+//          std::cout<<edge_id<<std::endl;
             input_right[edge_id] = result_score;// update the efficient score
-//            std::cout<<"nani7777"<<std::endl;
+//          std::cout<<"nani7777"<<std::endl;
         }
-
     }
 
     return input_right;
 }
-
-
-
 
 torch::Tensor gat_update_all_vertix1(const torch::Tensor & input_feature, snap_t<dst_id_t>* snaph, const torch::Tensor &  edge_score_by_softmax, string gather_operator,  int64_t reverse) {
     //snap_t<dst_id_t>* snaph = 0;
@@ -259,37 +242,32 @@ torch::Tensor gat_update_all_vertix1(const torch::Tensor & input_feature, snap_t
     //build the mailbox
     std::map<int, torch::Tensor> mailbox;
     vid_t v_count = snaph->get_vcount();
-    std::cout << "-> begin the scatter!!" << std::endl;
+    //std::cout << "-> begin the scatter!!" << std::endl;
     int count = 0;
     for (vid_t v = 0; v < v_count; v++) {
-
-        //if ( 0 == (nebr_count = snaph->get_nebrs_out(v, header))) continue;
         if (reverse == 1){
             nebr_count = snaph->get_nebrs_in(v, header);
         } else {
             nebr_count = snaph->get_nebrs_out(v, header);
         }
-        //std::cout << nebr_count  << std::endl;
         // if one node do not have any neighbor, we do not scatter it's message
-        if (nebr_count == 0){
-            continue;
-        }
+        if (nebr_count == 0) { continue; }
+
         // the node j scatter it's message to all neighors
-        if (edge_score_by_softmax.defined() == false){
+        if (edge_score_by_softmax.defined() == false) {
             for (degree_t i = 0; i < nebr_count; ++i) {
                 sid = TO_SID(get_sid(header[i]));
-                //std::cout << "the sid" <<std::endl;
-                torch::Tensor message = input_feature[sid];// no edge scope here
+                torch::Tensor message = input_feature[v];// no edge scope here
                 message = message.reshape({1, output_dim});
                 //If mailbox is empty, we initilize the mailbox
-                if (mailbox.count(sid) == 0){
+                if (mailbox.count(sid) == 0) {
                     //std::cout<<"nani?"<<std::endl;
                     //std::cout<<message<<std::endl;
                     mailbox[sid] = message;
                     count = count + 1;
                     continue;
-
                 }
+
                 // If the mailbox is not emptys, we concatenate the received message with the new message
                 torch::Tensor temp = torch::cat({mailbox[sid], message}, 0);
                 count = count + 1;
@@ -298,13 +276,11 @@ torch::Tensor gat_update_all_vertix1(const torch::Tensor & input_feature, snap_t
                 mailbox[sid] = temp;
             }
 
-        }
-        else{
-
+        } else { 
             for (degree_t i = 0; i < nebr_count; ++i) {
                 sid = TO_SID(get_sid(header[i]));
                 //std::cout << "the sid" <<std::endl;
-                torch::Tensor message = input_feature[sid];
+                torch::Tensor message = input_feature[v];
                 torch::Tensor scope = edge_score_by_softmax[count];
                 message = message * scope;
                 message = message.reshape({1, output_dim});
@@ -324,12 +300,11 @@ torch::Tensor gat_update_all_vertix1(const torch::Tensor & input_feature, snap_t
                 //std::cout << temp<< std::endl;
                 mailbox[sid] = temp;
             }
-
         }
-
     }
+
     //gather procedure, each node gather it's received message by the method defined by 'gather_operator'
-    std::cout << "-> gather procedure begins" << (int) reverse << std::endl;
+    //std::cout << "-> gather procedure begins" << (int) reverse << std::endl;
 
     torch::Tensor temp;
     for (std::map<int,torch::Tensor>::iterator it = mailbox.begin(); it!= mailbox.end(); ++it){
@@ -350,7 +325,7 @@ torch::Tensor gat_update_all_vertix1(const torch::Tensor & input_feature, snap_t
         }
         //std::cout<<"aaaa"<<std::endl;
         //std::cout<<temp<<std::endl;
-        std::cout<< "ceshi" << std::endl;
+        //std::cout<< "ceshi" << std::endl;
 
         it->second = temp;
     }
@@ -397,7 +372,7 @@ public:
         auto grad_graph_snaph = torch::Tensor();
         auto grad_input_left = gat_update_all_vertix1(grad_outputs[0] * input_left, snaph->snaph, {}, "sum" ,reverse);// {} represnts the None
         auto grad_input_right = gat_update_by_edge1(input_left, snaph -> snaph, input_right, "mul", 0);//not sure
-        cout << "grad output1" << endl;
+        //cout << "grad output1" << endl;
 
         return {grad_input_left, grad_graph_snaph, grad_input_right };
     }
@@ -428,7 +403,7 @@ public:
         auto grad_graph_snaph = torch::Tensor();
         auto grad_edge_score_by_softmax1 = torch::Tensor();  //grad_outputs[0] * edge_score_by_softmax - edge_score_by_softmax;// not sure
         auto grad_input = gat_update_all_vertix1(grad_outputs[0], snaph->snaph, edge_score_by_softmax,"sum" ,reverse);
-        cout << "grad output1" << endl;
+        //cout << "grad output1" << endl;
 
         return {grad_input, grad_graph_snaph, grad_edge_score_by_softmax1};
     }
@@ -462,7 +437,7 @@ public:
         auto accum = GAT_update_all_vertix::apply(sds, snaph, grad_outputs[0]);//TODO
 
         auto grad_score = sds - GAT_update_by_edge::apply(accum, snaph, out);
-        cout << "grad output1" << endl;
+        //cout << "grad output1" << endl;
 
         return {grad_graph_snaph, grad_score};
     }
@@ -481,21 +456,19 @@ GATlayerImpl::GATlayerImpl(int64_t in_dim, int64_t out_dim)
 torch::Tensor GATlayerImpl::forward(torch::Tensor input, c10::intrusive_ptr<SnapWrap> snaph){
 
     torch::Tensor map_input = linear1(input); // equation1
-    std::cout<<"nani?"<< std::endl;
+    //std::cout<<"nani?"<< std::endl;
     torch::Tensor input_left = torch::matmul(map_input, W_left);
-    std::cout<<"nani2"<<std::endl;
+    //std::cout<<"nani2"<<std::endl;
     torch::Tensor input_right = torch::matmul(map_input, W_right);
-    std::cout<<"nani3"<<std::endl;
+    //std::cout<<"nani3"<<std::endl;
     torch::Tensor edge_score = add_by_edge(snaph -> snaph, input_left, input_right);//equation 2 by edge
-    std::cout<<"nani4"<<std::endl;
+    //std::cout<<"nani4"<<std::endl;
     torch::Tensor efficient_score = torch::leaky_relu(edge_score, 0.2); // double check
-    std::cout<<"nani5"<<std::endl;
+    //std::cout<<"nani5"<<std::endl;
     torch::Tensor edge_score_by_softmax = GAT_edge_softmax::apply(snaph, efficient_score);//get final significiant for each edge
-    std::cout<<"nani6"<<std::endl;
+    //std::cout<<"nani6"<<std::endl;
     torch::Tensor h = GAT_update_all_vertix::apply(map_input, snaph, edge_score_by_softmax);
-    std::cout<<"nani7"<<std::endl;
-
-
+    //std::cout<<"nani7"<<std::endl;
 
 //    torch::Tensor h = GAT_result::apply(temp, snaph, this);
     return h;
@@ -518,23 +491,3 @@ torch::Tensor GAT::forward(torch::Tensor input,
 
     return h;
 }
-
-
-/*
-vector<torch::Tensor> GAT::parameters(){
-    std::vector<torch::Tensor> result;
-    torch::Tensor para1 = gatlayer1.linear1.parameters() ;
-    torch::Tensor para2 = gatlayer2.linear1.parameters() ;
-    torch::Tensor para3 = gatlayer1.W_left;
-    torch::Tensor para4 = gatlayer1.W_right;
-    torch::Tensor para5 = gatlayer2.W_left;
-    torch::Tensor para6 = gatlayer2.W_right;
-    result.push_back(para1);
-    result.push_back(para2);
-    result.push_back(para3);
-    result.push_back(para4);
-    result.push_back(para5);
-    result.push_back(para6);
-    return result;
-}
-*/
