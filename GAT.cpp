@@ -236,7 +236,10 @@ torch::Tensor gat_update_all_vertix1(const torch::Tensor & input_feature, snap_t
     degree_t nebr_count = 0;
     vid_t sid;
     nebr_reader_t<dst_id_t> header;
-    int output_dim = input_feature.size(1);
+    int output_dim = 1; //input_feature.size(1);
+    if (input_feature.defined() != false) {
+        output_dim = input_feature.size(1);
+    }
 
 
     //build the mailbox
@@ -254,10 +257,10 @@ torch::Tensor gat_update_all_vertix1(const torch::Tensor & input_feature, snap_t
         if (nebr_count == 0) { continue; }
 
         // the node j scatter it's message to all neighors
-        if (edge_score_by_softmax.defined() == false) {
+        if (input_feature.defined() == false) {
             for (degree_t i = 0; i < nebr_count; ++i) {
                 sid = TO_SID(get_sid(header[i]));
-                torch::Tensor message = input_feature[v];// no edge scope here
+                torch::Tensor message = edge_score_by_softmax[count];
                 message = message.reshape({1, output_dim});
                 //If mailbox is empty, we initilize the mailbox
                 if (mailbox.count(sid) == 0) {
@@ -275,7 +278,6 @@ torch::Tensor gat_update_all_vertix1(const torch::Tensor & input_feature, snap_t
                 //std::cout << temp<< std::endl;
                 mailbox[sid] = temp;
             }
-
         } else { 
             for (degree_t i = 0; i < nebr_count; ++i) {
                 sid = TO_SID(get_sid(header[i]));
@@ -344,9 +346,6 @@ torch::Tensor gat_update_all_vertix1(const torch::Tensor & input_feature, snap_t
     //std::cout<< result<< std::endl;
 
     return result;
-
-
-
 }
 
 class GAT_update_by_edge : public Function<GAT_update_by_edge> {
@@ -417,11 +416,17 @@ public:
     // bias is an optional argument
     static torch::Tensor forward(AutogradContext *ctx, c10::intrusive_ptr<SnapWrap> snaph,  const torch::Tensor & efficient_score) {
         ctx->saved_data["snaph"] = snaph;
-        //ctx->save_for_backward({input, snaph, gather_operator, reverse});
-        auto score_max = gat_update_all_vertix1(efficient_score, snaph->snaph, {} ,"max" , 0);
+        //score_max will be |V| of dst vertices, efficient_score is |E|
+        auto score_max = gat_update_all_vertix1({}, snaph->snaph, efficient_score, "max" , 0);
+
+        //Score is |E|
         auto score = gat_update_by_edge1(score_max, snaph->snaph, efficient_score, "sub", 0);
         score = torch::exp(score);
-        auto score_sum = gat_update_all_vertix1(score, snaph->snaph, {} ,"sum" , 0);
+        
+        //Sum edge score to dst. Score_sum will be |V|
+        auto score_sum = gat_update_all_vertix1({}, snaph->snaph, score, "sum" , 0);
+
+        //score%score_sum. out is |E|
         auto out = gat_update_by_edge1(score_sum, snaph -> snaph, score, "div", 0);
         ctx->save_for_backward({out});
         return out;
@@ -434,9 +439,12 @@ public:
         auto snaph = ctx->saved_data["snaph"].toCustomClass<SnapWrap>();
         //auto grad_output = grad_outputs[0];
         auto grad_graph_snaph = torch::Tensor();
-        auto accum = GAT_update_all_vertix::apply(sds, snaph, grad_outputs[0]);//TODO
-
-        auto grad_score = sds - GAT_update_by_edge::apply(accum, snaph, out);
+        //auto accum = GAT_update_all_vertix::apply(sds, snaph, grad_outputs[0]);//TODO
+        //auto grad_score = sds - GAT_update_by_edge::apply(accum, snaph, out);
+        
+        auto accum = gat_update_all_vertix1({}, snaph->snaph, sds, "sum", 0);
+        auto grad_score = sds - gat_update_by_edge1(accum, snaph->snaph, out, "mul", 0);
+        
         //cout << "grad output1" << endl;
 
         return {grad_graph_snaph, grad_score};
