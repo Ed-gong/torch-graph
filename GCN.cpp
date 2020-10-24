@@ -39,7 +39,7 @@ public:
         torch::Tensor result = torch::zeros({dim, output_dim});
         array2d_t<float> output_array(result.data_ptr<float>(), dim, output_dim);
         
-        scatter_gather1(snaph->snaph, input_array, output_array, gather_operator, 0);
+        _gspmv(snaph->snaph, input_array, output_array, gather_operator, 0);
 
         return result;
     }
@@ -49,6 +49,9 @@ public:
         //auto input = saved[0];
         auto snaph = ctx->saved_data["snaph"].toCustomClass<SnapWrap>();
         string gather_operator = ctx->saved_data["gather_operator"].toStringRef();
+        
+        ctx->saved_data.clear();//required for memory leak fix 
+        
         //auto grad_output = grad_outputs[0];
         int64_t reverse = 1;
         //std::cout<<"grad_output"<<std::endl;
@@ -66,7 +69,7 @@ public:
         array2d_t<float> output_array(result.data_ptr<float>(), dim, output_dim);
         
         
-        scatter_gather1(snaph->snaph, input_array, output_array, gather_operator, reverse);
+        _gspmv(snaph->snaph, input_array, output_array, gather_operator, reverse);
         //cout << "grad output1" << endl;
         //cout << grad_input << endl;
 
@@ -92,10 +95,10 @@ torch::Tensor GraphConvImpl::forward(torch::Tensor input, c10::intrusive_ptr<Sna
     //mult W first to reduce the feature size for aggregation
         //input = torch::matmul(input, W);
         dst_data = torch::matmul(input, W);
-        //dst_data = scatter_gather1(snaph, input, "sum");
+        //dst_data = _gspmv(snaph, input, "sum");
     } else {
         //aggregate first then mult W
-        //dst_data = scatter_gather1(snaph, input, "sum");
+        //dst_data = _gspmv(snaph, input, "sum");
         dst_data = torch::matmul(dst_data, W);
     }*/
     

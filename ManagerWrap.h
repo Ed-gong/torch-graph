@@ -200,7 +200,7 @@ torch::Tensor ManagerWrap_t<T>::scatter_gather(const torch::Tensor & input, stri
     torch::Tensor result = torch::zeros({dim, output_dim});
     array2d_t<float> output_array(result.data_ptr<float>(), dim, output_dim);
     
-    scatter_gather1(snaph->snaph, input_array, output_array, gather_operator, reverse);
+    _gspmv(snaph->snaph, input_array, output_array, gather_operator, reverse);
     return result;
 }
 
