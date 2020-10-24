@@ -371,3 +371,52 @@ torch::Tensor GAT::forward(torch::Tensor input,
 
     return h;
 }
+
+GATmultiheadImpl::GATmultiheadImpl(int64_t in_dim, int64_t out_dim, int64_t num_heads) :
+    mlist(nullptr)
+{
+        /*torch::nn::ModuleList mlist(
+                for (int64_t i = 0; i < num_heads; ++i){
+                gatlayer(in_dim, hidden_dim);
+                }
+          );*/
+}
+
+torch::Tensor GATmultiheadImpl::forward(torch::Tensor input, c10::intrusive_ptr<SnapWrap> snaph, string merge /*= "cat"*/){
+    torch::Tensor result;
+    torch::Tensor temp;
+    /*
+    for (const auto &module : *mlist) {
+        for (auto it = module->begin(input); it != module->end(); ++it) {
+            temp = it->forward(input, snaph);
+            if (merge == "cat"){
+                result = torch::cat({result, temp}, 1);
+            }
+            else{
+                result = torch::cat({result, temp}, 0);// if we do not concatenate, we calcualte the average
+            }
+            if (merge != "cat"){
+                result = torch::mean(result);
+            }
+        }
+    }*/
+    return result;
+}
+
+
+
+GAT1::GAT1(int64_t in_dim, int64_t hidden_dim, int64_t out_dim, int64_t num_heads)
+        : gatmultihead1(in_dim, hidden_dim, num_heads), gatmultihead2(hidden_dim * num_heads, out_dim, 1){
+    register_module("gatmultihead1", gatmultihead1);
+    register_module("gatmultihead2", gatmultihead2);
+}
+
+torch::Tensor GAT1::forward(torch::Tensor input,
+                           c10::intrusive_ptr<SnapWrap> snaph)
+{
+    torch:: Tensor h = gatmultihead1 -> forward(input, snaph);
+    h = torch::relu(h);
+    h = gatmultihead2 -> forward(h, snaph);
+
+    return h;
+}

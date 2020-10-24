@@ -50,6 +50,15 @@ struct GAT : torch::nn::Module {
     GATlayer gatlayer1, gatlayer2;
 };
 
+struct GATmultiheadImpl : torch::nn::Module {
+    GATmultiheadImpl(int64_t in_dim, int64_t out_dim, int64_t num_heads);
+    torch::Tensor forward(torch::Tensor input, c10::intrusive_ptr<SnapWrap> snaph, string merge = "cat");
+    torch::nn::ModuleList mlist;
+};
+TORCH_MODULE(GATmultihead);
 
-
-
+struct GAT1 : torch::nn::Module {
+    GAT1(int64_t in_dim, int64_t hidden_dim, int64_t out_dim, int64_t num_heads);
+    torch::Tensor forward(torch::Tensor input, c10::intrusive_ptr<SnapWrap> snaph);
+    GATmultihead gatmultihead1, gatmultihead2;
+};
