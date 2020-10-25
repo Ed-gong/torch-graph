@@ -185,6 +185,7 @@ ManagerWrap_t<T>::ManagerWrap_t(int64_t flags, int64_t node_number, string path)
 
     std::cout << "-> Create in-Memory Graph !!" << std::endl;
     manager -> schema(flags);
+    _format = 1;//XXX
     manager -> setup_graph(node_number);
     manager -> prep_graph(path,"");
 }

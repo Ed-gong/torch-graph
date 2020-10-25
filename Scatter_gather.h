@@ -75,6 +75,8 @@ template <class T>
 struct array1d_t {
     T* data_ptr;
     int64_t col_count;
+    bool alloc;
+
     T operator[] (int64_t index) {//returns the element 
         return data_ptr[index];
     }
@@ -84,14 +86,21 @@ struct array1d_t {
     array1d_t(int64_t a_col_count) {
         data_ptr = (T*)calloc(sizeof(T), a_col_count);
         col_count = a_col_count;
+        alloc = true;
     }
     array1d_t(T* ptr, int64_t a_col_count) {
         data_ptr = ptr;
         col_count = a_col_count;
+        alloc = false;
     }
 
     ~array1d_t() {
-        //free(data_ptr);
+        if (alloc) {
+            free(data_ptr);
+        }
+    }
+    void reset() {
+        memset(data_ptr, 0, col_count*sizeof(T));
     }
     void copy(T* ptr) {
         memcpy(data_ptr, ptr, col_count*sizeof(T)); 
@@ -179,37 +188,39 @@ void _gspmvw(snap_t<T>* snaph, array2d_t<float> & input, array1d_t<float>& edge_
 {
     vid_t v_count = snaph->get_vcount();
     int output_dim = input.col_count;
+    assert(op == eSUM);
 
     //Start of parallelism
     at::parallel_for(0, v_count, 0, [&](int64_t start, int64_t end) {
-    for (vid_t v = start; v < end; v++)
-    //for (vid_t v = 0; v < v_count; v++) 
-    { 
+        array1d_t<float> message(output_dim);//zero initialized
         degree_t nebr_count = 0;
         vid_t sid;
         vid_t eid = 0;
         nebr_reader_t<T> header;
-        if (reverse == 0) {
-            nebr_count = snaph->get_nebrs_in(v, header);
-        } else {
-            nebr_count = snaph->get_nebrs_out(v, header);
+        for (vid_t v = start; v < end; v++)
+        //for (vid_t v = 0; v < v_count; v++) 
+        { 
+            if (reverse == 0) {
+                nebr_count = snaph->get_nebrs_in(v, header);
+            } else {
+                nebr_count = snaph->get_nebrs_out(v, header);
+            }
+            // if one node do not have any neighbor, we do not scatter it's message
+            if (nebr_count == 0) {
+                //result[v] = input_feature[v];
+                continue; 
+            }
+            
+            // the node j scatter it's message to all neighors
+            //edit here for self loop
+            message.reset(); 
+            for (degree_t i = 0; i < nebr_count; ++i) {
+                sid = TO_SID(get_sid(header[i]));
+                eid = get_weight_int(header[i]);
+                message.addw(input[sid], edge_weight[eid]);
+            }
+            output.row_copy(message.data_ptr, v);
         }
-        // if one node do not have any neighbor, we do not scatter it's message
-        if (nebr_count == 0) {
-            //result[v] = input_feature[v];
-            continue; 
-        }
-        
-        // the node j scatter it's message to all neighors
-        array1d_t<float> message(output_dim);//zero initialized
-        //edit here for self loop
-        for (degree_t i = 0; i < nebr_count; ++i) {
-            sid = TO_SID(get_sid(header[i]));
-            eid = get_weight_int(header[i]);
-            message.addw(input[sid], edge_weight[eid]);
-        }
-        output.row_copy(message.data_ptr, v);
-    }
     });//end of parallelism
 }
 
@@ -253,6 +264,8 @@ void _gspmvw(snap_t<T>* snaph, array1d_t<float>& edge_weight,
                 message = std::max(message, edge_weight[eid]);
             } else if (op == eMIN) {
                 message = std::min(message, edge_weight[eid]);
+            } else {
+                assert(0);
             }
         }
         output.assign(v, message);
