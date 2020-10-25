@@ -85,8 +85,13 @@ struct array1d_t {
         data_ptr = (T*)calloc(sizeof(T), a_col_count);
         col_count = a_col_count;
     }
+    array1d_t(T* ptr, int64_t a_col_count) {
+        data_ptr = ptr;
+        col_count = a_col_count;
+    }
+
     ~array1d_t() {
-        free(data_ptr);
+        //free(data_ptr);
     }
     void copy(T* ptr) {
         memcpy(data_ptr, ptr, col_count*sizeof(T)); 
@@ -170,7 +175,7 @@ void _gspmv(snap_t<T>* snaph, array2d_t<float> & input, array2d_t<float> & outpu
 
 template <class T>
 void _gspmvw(snap_t<T>* snaph, array2d_t<float> & input, array1d_t<float>& edge_weight,
-             array2d_t<float> & output, op_t op, int64_t reverse, bool norm = true)
+             array2d_t<float> & output, op_t op, int64_t reverse)
 {
     vid_t v_count = snaph->get_vcount();
     int output_dim = input.col_count;
@@ -208,6 +213,7 @@ void _gspmvw(snap_t<T>* snaph, array2d_t<float> & input, array1d_t<float>& edge_
     });//end of parallelism
 }
 
+//only |E| as the input
 template <class T>
 void _gspmvw(snap_t<T>* snaph, array1d_t<float>& edge_weight,
              array1d_t<float> & output, op_t op, int64_t reverse)
@@ -244,12 +250,12 @@ void _gspmvw(snap_t<T>* snaph, array1d_t<float>& edge_weight,
             if (op == eSUM) {
                 message += edge_weight[eid];
             } else if (op == eMAX) {
-                message = std::max(message, edge_weight[sid]);
+                message = std::max(message, edge_weight[eid]);
             } else if (op == eMIN) {
-                message = std::min(message, edge_weight[sid]);
+                message = std::min(message, edge_weight[eid]);
             }
         }
-        output[v] = message;
+        output.assign(v, message);
     }
     });//end of parallelism
 }
@@ -260,12 +266,16 @@ void _gsddmm(snap_t<T>* snaph,
         array1d_t<float> & input_left, array1d_t<float> & input_right,
         array1d_t<float> & output, op_t op, int64_t reverse)
 {
-    degree_t nebr_count = 0;
-    vid_t sid, eid;
-    nebr_reader_t<dst_id_t> header;
     vid_t v_count = snaph->get_vcount();
-    
-    for (vid_t v = 0; v < v_count; v++) {
+
+    //Start of parallelism
+    at::parallel_for(0, v_count, 0, [&](int64_t start, int64_t end) {
+    for (vid_t v = start; v < end; v++)
+    //for (vid_t v = 0; v < v_count; v++) 
+    {
+        degree_t nebr_count = 0;
+        vid_t sid, eid;
+        nebr_reader_t<T> header;
         if (reverse == 1){
             nebr_count = snaph->get_nebrs_in(v, header);
         } else {
@@ -293,7 +303,38 @@ void _gsddmm(snap_t<T>* snaph,
             output.assign(eid, result_score);// update the efficient score
         }
     }
+    });//end of parallelism
 }
+
+template <class T>
+void _apply_edges(snap_t<T>* snaph, 
+        array1d_t<float> & input_left, array1d_t<float> & input_right,
+        array1d_t<float> & output)
+{
+    vid_t v_count = snaph->get_vcount();
+    
+    //Start of parallelism
+    at::parallel_for(0, v_count, 0, [&](int64_t start, int64_t end) {
+    for (vid_t v = start; v < end; v++)
+    //for (vid_t v = 0; v < v_count; v++) 
+    {
+        degree_t nebr_count = 0;
+        vid_t sid, eid;
+        nebr_reader_t<T> header;
+        nebr_count = snaph->get_nebrs_out(v, header);
+
+        float result_score = 0;
+        for (degree_t i = 0; i < nebr_count; ++i) {
+            sid = TO_SID(get_sid(header[i]));
+            eid = get_weight_int(header[i]);
+
+            result_score = input_left[v] + input_right[sid];
+            output.assign(eid, result_score);// update the efficient score
+        }
+    }
+    });//end of parallelism
+}
+
 
 
 #endif //UNTITLED1_SCATTER_GATHER_H
