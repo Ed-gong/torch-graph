@@ -44,3 +44,4 @@ struct SnapWrap_t : torch::CustomClassHolder {
 };
 
 typedef SnapWrap_t<dst_id_t> SnapWrap;
+typedef SnapWrap_t<weight_sid_t> SnapWrapW;

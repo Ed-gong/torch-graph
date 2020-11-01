@@ -27,16 +27,41 @@ using torch::autograd::tensor_list;
 using namespace torch::autograd;
 #include "GAT.h"
 
-torch::Tensor apply_edges(snap_t<dst_id_t>* snaph, const torch::Tensor & input_left, const torch::Tensor & input_right)
+torch::Tensor apply_edges(snap_t<weight_sid_t>* snaph, const torch::Tensor & input_left, const torch::Tensor & input_right)
+{
+    int output_dim = input_left.size(1);
+
+    int edge_count = 0;
+    if (snaph->is_udir()) {
+        edge_count = _edge_count << 1;
+    } else {
+        edge_count = _edge_count;
+    }
+    
+    int dim = input_left.size(0);
+    array1d_t<float> input_left_array(input_left.data_ptr<float>(), dim);
+    
+    dim = input_right.size(0);
+    array1d_t<float> input_right_array(input_right.data_ptr<float>(), dim);
+
+    torch::Tensor out = torch::zeros({edge_count, output_dim});
+    array1d_t<float> out_array(out.data_ptr<float>(), edge_count);
+
+    _apply_edges(snaph, input_left_array, input_right_array, out_array);
+    return out;
+}
+
+/*
+torch::Tensor apply_edges(snap_t<weight_sid_t>* snaph, const torch::Tensor & input_left, const torch::Tensor & input_right)
 {
     degree_t nebr_count = 0;
-    vid_t sid;
-    nebr_reader_t<dst_id_t> header;
+    vid_t sid, eid;
+    nebr_reader_t<weight_sid_t> header;
 
     vid_t v_count = snaph->get_vcount();
 
     //return the value of each node after gather procedure
-    //int output_dim = input_feature.size(1);
+    int output_dim = input_left.size(1);
 
     int edge_count = 0;
     if (snaph->is_udir()) {
@@ -45,7 +70,7 @@ torch::Tensor apply_edges(snap_t<dst_id_t>* snaph, const torch::Tensor & input_l
         edge_count = _edge_count;
     }
 
-    torch::Tensor result = torch::zeros({edge_count,1});
+    torch::Tensor result = torch::zeros({edge_count,output_dim});
     int count = 0;
 
 
@@ -54,12 +79,13 @@ torch::Tensor apply_edges(snap_t<dst_id_t>* snaph, const torch::Tensor & input_l
         
         for (degree_t i = 0; i < nebr_count; ++i) {
             sid = TO_SID(get_sid(header[i]));
+            eid = get_weight_int(header[i]);
             //std::cout << "the sid" <<std::endl;
             torch::Tensor input_feature_left = input_left[v];
             torch::Tensor input_feature_right = input_right[sid];
             torch::Tensor temp = torch::add(input_feature_left , input_feature_right);
             //temp = temp.reshape({1, 1});
-            result[count] = temp;
+            result[eid] = temp;
             count = count + 1;
         }
     }
@@ -67,11 +93,28 @@ torch::Tensor apply_edges(snap_t<dst_id_t>* snaph, const torch::Tensor & input_l
     assert(count == edge_count);
     return result;
 }
-
+*/
 
 // calcuate the feature by edge, left is vertex, right is edge
-torch::Tensor gsddmm(const torch::Tensor & input_left, snap_t<dst_id_t>* snaph, const torch::Tensor & input_right, string oper, int64_t reverse)
+torch::Tensor gsddmm(const torch::Tensor & input_left, snap_t<weight_sid_t>* snaph, const torch::Tensor & input_right, op_t op, int64_t reverse)
 {
+    int dim = input_left.size(0);
+    int output_dim = input_left.size(1);
+    array1d_t<float> input_left_array(input_left.data_ptr<float>(), dim);
+    
+    int edim = input_right.size(0);
+    output_dim = input_right.size(1);
+    array1d_t<float> input_right_array(input_right.data_ptr<float>(), edim);
+
+    torch::Tensor out = torch::zeros({edim, output_dim});
+    array1d_t<float> out_array(out.data_ptr<float>(), edim);
+
+    _gsddmm(snaph, input_left_array, input_right_array, out_array, op, reverse);
+    return out;
+}
+
+/*
+torch::Tensor gsddmm(const torch::Tensor & input_left, snap_t<weight_sid_t>* snaph, const torch::Tensor & input_right, op_t op, int64_t reverse)
     degree_t nebr_count = 0;
     vid_t sid;
     nebr_reader_t<dst_id_t> header;
@@ -116,9 +159,46 @@ torch::Tensor gsddmm(const torch::Tensor & input_left, snap_t<dst_id_t>* snaph, 
 
     return input_right;
 }
+*/
 
-torch::Tensor spmmw(const torch::Tensor & input_feature, snap_t<dst_id_t>* snaph, const torch::Tensor &  edge_score_by_softmax, string gather_operator,  int64_t reverse) 
+//right is |E| 
+torch::Tensor spmmw(snap_t<weight_sid_t>* snaph, const torch::Tensor & input_right,
+                    op_t op, int64_t reverse)
 {
+    int edim = input_right.size(0);
+    int output_dim = input_right.size(1);
+    array1d_t<float> input_right_array(input_right.data_ptr<float>(), edim);
+
+    int dim = snaph->get_vcount();
+    torch::Tensor out = torch::zeros({dim, output_dim});
+    array1d_t<float> out_array(out.data_ptr<float>(), dim);
+
+    _gspmvw(snaph, input_right_array, out_array, op, reverse);
+    return out;
+}
+
+//left is |V|, right is |E| 
+torch::Tensor spmmw(const torch::Tensor & input_left, snap_t<weight_sid_t>* snaph, 
+                 const torch::Tensor & input_right, op_t op, int64_t reverse) 
+{
+    int dim = input_left.size(0);
+    int output_dim = input_left.size(1);
+    array2d_t<float> input_left_array(input_left.data_ptr<float>(), dim, output_dim);
+    
+    int edim = input_right.size(0);
+    //output_dim = input_right.size(1);
+    array1d_t<float> input_right_array(input_right.data_ptr<float>(), edim);
+
+    torch::Tensor out = torch::zeros({dim, output_dim});
+    array2d_t<float> out_array(out.data_ptr<float>(), dim, output_dim);
+
+    _gspmvw(snaph, input_left_array, input_right_array, out_array, op, reverse);
+    return out;
+}
+
+/*
+torch::Tensor spmmw(const torch::Tensor & input_left, snap_t<weight_sid_t>* snaph, 
+                 const torch::Tensor & input_right, op_t op, int64_t reverse) 
     degree_t nebr_count = 0;
     vid_t sid;
     nebr_reader_t<dst_id_t> header;
@@ -227,7 +307,9 @@ torch::Tensor spmmw(const torch::Tensor & input_feature, snap_t<dst_id_t>* snaph
 
     return result;
 }
+*/
 
+/*
 class GAT_update_by_edge : public Function<GAT_update_by_edge> {
 public:
     // Note that both forward and backward are static functions
@@ -256,6 +338,7 @@ public:
         return {grad_input_left, grad_graph_snaph, grad_input_right };
     }
 };
+*/
 
 
 class SPMMW : public Function<SPMMW> {
@@ -264,24 +347,23 @@ public:
 
     // bias is an optional argument
     static torch::Tensor forward(AutogradContext *ctx, torch::Tensor input,
-                                 c10::intrusive_ptr<SnapWrap> snaph, torch::Tensor edge_score_by_softmax) {
-        ctx->save_for_backward({input, edge_score_by_softmax});
+                                 c10::intrusive_ptr<SnapWrapW> snaph, torch::Tensor edge_score_by_softmax) {
+        ctx->save_for_backward({edge_score_by_softmax});
         ctx->saved_data["snaph"] = snaph;
         //ctx->save_for_backward({input, snaph, gather_operator, reverse});
-        auto output = spmmw(input, snaph -> snaph, edge_score_by_softmax,"sum", 0);
+        auto output = spmmw(input, snaph -> snaph, edge_score_by_softmax, eSUM, 0);
         return output;
     }
 
     static tensor_list backward(AutogradContext *ctx, auto grad_outputs) {
         auto saved = ctx->get_saved_variables();
-        auto input = saved[0];
-        auto edge_score_by_softmax = saved[1];
-        auto snaph = ctx->saved_data["snaph"].toCustomClass<SnapWrap>();
+        auto edge_score_by_softmax = saved[0];
+        auto snaph = ctx->saved_data["snaph"].toCustomClass<SnapWrapW>();
         //auto grad_output = grad_outputs[0];
         int64_t reverse = 1;
         auto grad_graph_snaph = torch::Tensor();
         auto grad_edge_score_by_softmax1 = torch::Tensor();  //grad_outputs[0] * edge_score_by_softmax - edge_score_by_softmax;// not sure
-        auto grad_input = spmmw(grad_outputs[0], snaph->snaph, edge_score_by_softmax, "sum" ,reverse);
+        auto grad_input = spmmw(grad_outputs[0], snaph->snaph, edge_score_by_softmax, eSUM, reverse);
         //cout << "grad output1" << endl;
 
         return {grad_input, grad_graph_snaph, grad_edge_score_by_softmax1};
@@ -294,20 +376,20 @@ public:
     // Note that both forward and backward are static functions
 
     // bias is an optional argument
-    static torch::Tensor forward(AutogradContext *ctx, c10::intrusive_ptr<SnapWrap> snaph,  const torch::Tensor & efficient_score) {
+    static torch::Tensor forward(AutogradContext *ctx, c10::intrusive_ptr<SnapWrapW> snaph,  const torch::Tensor & efficient_score) {
         ctx->saved_data["snaph"] = snaph;
         //score_max will be |V| of dst vertices, efficient_score is |E|
-        auto score_max = spmmw({}, snaph->snaph, efficient_score, "max" , 0);
+        auto score_max = spmmw(snaph->snaph, efficient_score, eMAX , 0);
 
         //Score is |E|
-        auto score = gsddmm(score_max, snaph->snaph, efficient_score, "sub", 0);
+        auto score = gsddmm(score_max, snaph->snaph, efficient_score, eSUB, 0);
         score = torch::exp(score);
         
         //Sum edge score to dst. Score_sum will be |V|
-        auto score_sum = spmmw({}, snaph->snaph, score, "sum" , 0);
+        auto score_sum = spmmw(snaph->snaph, score, eSUM , 0);
 
         //score%score_sum. out is |E|
-        auto out = gsddmm(score_sum, snaph -> snaph, score, "div", 0);
+        auto out = gsddmm(score_sum, snaph -> snaph, score, eDIV, 0);
         ctx->save_for_backward({out});
         return out;
     }
@@ -316,11 +398,11 @@ public:
         auto saved = ctx->get_saved_variables();
         auto out = saved[0];
         auto sds = out * grad_outputs[0];
-        auto snaph = ctx->saved_data["snaph"].toCustomClass<SnapWrap>();
+        auto snaph = ctx->saved_data["snaph"].toCustomClass<SnapWrapW>();
         
-        auto accum = spmmw({}, snaph->snaph, sds, "sum", 0);
-        auto grad_score = sds - gsddmm(accum, snaph->snaph, out, "mul", 0);
-        
+        auto accum = spmmw(snaph->snaph, sds, eSUM, 0);
+        auto grad_score = sds - gsddmm(accum, snaph->snaph, out, eMUL, 0);
+         
         auto grad_graph_snaph = torch::Tensor();
         return {grad_graph_snaph, grad_score};
     }
@@ -333,7 +415,7 @@ GATlayerImpl::GATlayerImpl(int64_t in_dim, int64_t out_dim)
     W_right = register_parameter("W_right", torch::randn({out_dim, 1}));
 }
 
-torch::Tensor GATlayerImpl::forward(torch::Tensor input, c10::intrusive_ptr<SnapWrap> snaph){
+torch::Tensor GATlayerImpl::forward(torch::Tensor input, c10::intrusive_ptr<SnapWrapW> snaph){
 
     torch::Tensor map_input = linear1(input); // equation1
     //std::cout<<"nani?"<< std::endl;
@@ -349,6 +431,7 @@ torch::Tensor GATlayerImpl::forward(torch::Tensor input, c10::intrusive_ptr<Snap
     //std::cout<<"nani6"<<std::endl;
     torch::Tensor h = SPMMW::apply(map_input, snaph, edge_score_by_softmax);
     //std::cout<<"nani7"<<std::endl;
+    cout << edge_score_by_softmax[0] << "WWW " << endl <<  h[0] << endl;
 
 //    torch::Tensor h = GAT_result::apply(temp, snaph, this);
     return h;
@@ -363,7 +446,7 @@ GAT::GAT(int64_t in_dim, int64_t hidden_dim, int64_t out_dim)
 }
 
 torch::Tensor GAT::forward(torch::Tensor input,
-                           c10::intrusive_ptr<SnapWrap> snaph)
+                           c10::intrusive_ptr<SnapWrapW> snaph)
 {
     torch:: Tensor h = gatlayer1 -> forward(input, snaph);
     h = torch::relu(h);

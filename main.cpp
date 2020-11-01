@@ -37,7 +37,7 @@ struct GATWrap : torch::CustomClassHolder {
     :gat(in_dim, hidden_dim, out_dim){
   }
 
-  torch::Tensor forward(torch::Tensor input, c10::intrusive_ptr<SnapWrap> snaph)
+  torch::Tensor forward(torch::Tensor input, c10::intrusive_ptr<SnapWrapW> snaph)
   {   
       torch::Tensor result = gat.forward(input, snaph);
       return result;

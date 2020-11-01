@@ -33,7 +33,7 @@ torch::Tensor gat_update_all_vertix1(const torch::Tensor & input_feature, snap_t
 
 struct GATlayerImpl : torch::nn::Module {
     GATlayerImpl(int64_t in_dim, int64_t out_dim);
-    torch::Tensor forward(torch::Tensor input, c10::intrusive_ptr<SnapWrap> snaph);
+    torch::Tensor forward(torch::Tensor input, c10::intrusive_ptr<SnapWrapW> snaph);
     torch::nn::Linear linear1;
     torch::Tensor W_left;
     torch::Tensor W_right;
@@ -45,7 +45,7 @@ TORCH_MODULE(GATlayer);
 
 struct GAT : torch::nn::Module {
     GAT(int64_t in_dim, int64_t hidden_dim, int64_t out_dim);
-    torch::Tensor forward(torch::Tensor input, c10::intrusive_ptr<SnapWrap> snaph);
+    torch::Tensor forward(torch::Tensor input, c10::intrusive_ptr<SnapWrapW> snaph);
     //vector<torch::Tensor> parameters();
     GATlayer gatlayer1, gatlayer2;
 };
