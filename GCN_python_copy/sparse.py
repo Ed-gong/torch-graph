@@ -92,6 +92,58 @@ class EdgeSoftmax(th.autograd.Function):
 
         return None, grad_score, None, None
 
+class EdgeSoftmax_heads(th.autograd.Function):
+    @staticmethod
+    def forward(ctx, graph, efficient_score, num_vcount, dim):
+        heads = efficient_score.size(1)
+        feat = th.utils.dlpack.to_dlpack(efficient_score)
+        score_max = th.zeros(num_vcount, heads)
+        result = th.utils.dlpack.to_dlpack(score_max)
+        # todo find max edge value
+        # for score_max
+        graph.gspmvw2d(feat, result, gone.enumOP.eMAX, 0)
+        # sub from score_max
+        score_max = th.utils.dlpack.to_dlpack(score_max)
+        score = th.zeros(num_vcount, heads)
+        result = th.utils.dlpack.to_dlpack(score)
+        # todo find score - score_max
+        # for score
+        graph.gsddmm2d(score_max, feat, result, gone.enumOP.eSUB, 0)
+        # apply expo for score
+        score = th.exp(score)
+        score = th.utils.dlpack.to_dlpack(score)
+        score_sum = th.zeros(num_vcount, heads)
+        result = th.utils.dlpack.to_dlpack(score_sum)
+        # todo score_sum
+        graph.gspmvw(score, result, gone.enumOP.eSUM, 0)
+        score_sum = th.utils.dlpack.to_dlpack(score_sum)
+        out = th.zeros(num_vcount, heads)
+        result = th.utils.dlpack.to_dlpack(out)
+        # todo score % score_sum.out is | E |
+        graph.gsddmm(score_sum, score, result, gone.enumOP.eDIV, 0)
+        ctx.backward_cache = graph, num_vcount, dim, out, heads
+        return out
+
+    @staticmethod
+    def backward(ctx, dZ):
+        graph, num_vcount, dim, out, heads = ctx.backward_cache
+        sds = out * dZ
+
+        fea = th.utils.dlpack.to_dlpack(sds)
+        accum = th.zeros(num_vcount, heads)
+        result = th.utils.dlpack.to_dlpack(accum)
+        # for accum
+        graph.gspmvw(fea, result, gone.enumOP.eSUM, 0)
+        accum = th.utils.dlpack.to_dlpack(accum)
+        out = th.utils.dlpack.to_dlpack(out)
+        temp = th.zeros(num_vcount, heads)
+        result = th.utils.dlpack.to_dlpack(temp)
+        temp = graph.gsddmm(accum, out, result, gone.enumOP.eMUL, 0)
+        grad_score = sds - temp
+
+        return None, grad_score, None, None
+
+
 
 class GSpmv_op(th.autograd.Function):
     @staticmethod
@@ -117,6 +169,32 @@ class GSpmv_op(th.autograd.Function):
         graph.spmmw_op(feat_X, feat_edge_score_by_softmax, result, gone.enumOP.eSUM, reverse)
         return res, None, None, None, None
 
+class GSpmv_op_heads(th.autograd.Function):
+    @staticmethod
+    def forward(ctx, X, graph, edge_score_by_softmax, num_vcount, dim):
+        # input is for each edge, edge_score_by_softmax is also refer to each edge
+        heads = edge_score_by_softmax.size(1)
+        feat_X = th.utils.dlpack.to_dlpack(X)
+        feat_edge_score_by_softmax = th.utils.dlpack.to_dlpack(edge_score_by_softmax)
+        rst = th.zeros(num_vcount, heads, dim)
+        result = th.utils.dlpack.to_dlpack(rst)
+        graph.spmmw_op2d(feat_X, feat_edge_score_by_softmax, result, gone.enumOP.eSUM, 0)
+        ctx.backward_cache = graph, edge_score_by_softmax, num_vcount, dim, heads
+        return rst
+
+
+    @staticmethod
+    def backward(ctx, dZ):
+        graph, edge_score_by_softmax, num_vcount, dim, heads = ctx.backward_cache
+        reverse = 1
+        feat_X = th.utils.dlpack.to_dlpack(dZ)
+        feat_edge_score_by_softmax = th.utils.dlpack.to_dlpack(edge_score_by_softmax)
+        res = th.zeros(num_vcount, heads, dim)
+        result = th.utils.dlpack.to_dlpack(res)
+        graph.spmmw_op2d(feat_X, feat_edge_score_by_softmax, result, gone.enumOP.eSUM, reverse)
+        return res, None, None, None, None
+
+
 
 # the gspmv has only 1 input, and then apply different operations such as sum, max on it
 def run_gspmm(graph, X, norm, num_vcount, dim):
@@ -127,6 +205,9 @@ def run_gspmm(graph, X, norm, num_vcount, dim):
 def run_gspmv_op(graph, X, edge_score_by_softmax, num_vcount, dim):
     return GSpmv_op.apply(X, graph, edge_score_by_softmax, num_vcount, dim)
 
+
+def run_gspmv_op_heads(graph, X, edge_score_by_softmax, num_vcount, dim):
+    return GSpmv_op_heads.apply(X, graph, edge_score_by_softmax, num_vcount, dim)
 
 def apply_edge(graph, el, er):
     dim = el.size(1)
@@ -139,8 +220,21 @@ def apply_edge(graph, el, er):
     return res
 
 
+def apply_edge_heads(graph, el, er):
+    heads = el.size(1)
+    feat_el = th.utils.dlpack.to_dlpack(el)
+    feat_er = th.utils.dlpack.to_dlpack(er)
+    edge_count = graph.get_edge_count()
+    res = th.zeros(edge_count, heads)
+    result = th.utils.dlpack.to_dlpack(res)
+    graph.apply_edges_op2d(feat_el, feat_er, result)
+    return res
+
+
 def edge_softmax(graph, efficient_score, num_vcount, dim):
     result = EdgeSoftmax.apply(graph, efficient_score, num_vcount, dim)
     return result
 
-
+def edge_softmax_heads(graph, efficient_score, num_vcount, dim):
+    result = EdgeSoftmax_heads.apply(graph, efficient_score, num_vcount, dim)
+    return result
