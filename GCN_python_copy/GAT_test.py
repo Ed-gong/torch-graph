@@ -6,6 +6,7 @@ import itertools
 import torch.nn.functional as F
 import pygraph as gone
 import numpy as np
+import datetime
 
 class GAT(nn.Module):
     def __init__(self,
@@ -35,12 +36,12 @@ class GAT(nn.Module):
                 num_hidden, num_hidden,
                 feat_drop, attn_drop, negative_slope, residual, self.activation))
         # output projection
-        # self.gat_layers.append(graphgat.GATConv(
-        #     num_hidden, num_classes, feat_drop, attn_drop, negative_slope, residual, None))
+        self.gat_layers.append(graphgat.GATConv(
+          num_hidden, num_classes, feat_drop, attn_drop, negative_slope, residual, None))
 
     def forward(self, inputs):
         h = inputs
-        for l in range(self.num_layers):
+        for l in range(self.num_layers + 1):
             h = self.gat_layers[l](self.graph, h).flatten(1)
         # output projection
         # logits = self.gat_layers[-1](self.graph, h).mean(1)
@@ -49,15 +50,17 @@ class GAT(nn.Module):
 
 if __name__ == "__main__":
     ingestion_flag = gone.enumGraph.eUnidir | gone.enumGraph.eDoubleEdge| gone.enumGraph.eCreateEID
-    ifile = "/home/datalab/data/test3"
+    ifile = "/home/datalab/data/test3/cora"
     num_node = 2708
+    num_sources = 1
+    num_thread = 8
     # manager = gone.pgraph_manager_tW(ifile, "", ingestion_flag, num_node)
     # snap_t = manager.create_static_view(gone.enumView.eStale)
 
     edge_dt = np.dtype([('src', np.int32), ('dst', np.int32), ('edgeid', np.int32)])
 
     outdir = ""
-    graph = gone.init(1, 1, outdir)  # Indicate one pgraph, and one vertex type
+    graph = gone.init(1, 1, outdir, num_sources, num_thread)  # Indicate one pgraph, and one vertex type
     tid0 = graph.init_vertex_type(2708, True, "gtype") # initiate the vertex type
     pgraph = graph.create_schema(ingestion_flag, tid0, "friend", edge_dt) # initiate the pgraph
 
@@ -72,11 +75,12 @@ if __name__ == "__main__":
 
     input_feature_dim = 1433
     # num_heads = 2
-    num_layers =1
+    num_layers = 3
     # heads_array = ([num_heads] * num_layers) + [1]
     net = GAT(snap_t, num_layers, input_feature_dim, 16, 7, activation = None, feat_drop = 0., attn_drop = 0., negative_slope =0.2, residual = False)
 
     labels, node_id, input_X = util.read_data()
+    print("type", type(input_X))
     train_idx, val_idx, test_idx = util.limit_data(labels)
     input_train, input_test, output_train, output_test = util.get_train_test_data(train_idx, test_idx, input_X, labels)
 
@@ -91,27 +95,32 @@ if __name__ == "__main__":
     # train the network
     optimizer = torch.optim.Adam(itertools.chain(net.parameters()), lr=0.01, weight_decay=5e-4)
     all_logits = []
+    start = datetime.datetime.now()
     for epoch in range(200):
         logits = net(input_X)
-        print ('check result')
-        print(logits)
-        print (logits.size())
+        #print ('check result')
+        #print(logits)
+        #print (logits.size())
         all_logits.append(logits.detach())
-        # logp = F.log_softmax(logits, 1)
-        loss = F.nll_loss(logits[labeled_nodes_train], labels[labeled_nodes_train])
+        logp = F.log_softmax(logits, 1)
+        loss = F.nll_loss(logp[labeled_nodes_train], labels[labeled_nodes_train])
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 
-        print('Epoch %d | Train_Loss: %.4f' % (epoch, loss.item()))
+        #print('Epoch %d | Train_Loss: %.4f' % (epoch, loss.item()))
 
         # check the accuracy for test data
         logits_test = net.forward(input_X)
         logp_test = F.log_softmax(logits_test, 1)
 
         acc_val = util.accuracy(logp_test[labeled_nodes_test], labels[labeled_nodes_test])
-        print('Epoch %d | Test_accuracy: %.4f' % (epoch, acc_val))
+        #print('Epoch %d | Test_accuracy: %.4f' % (epoch, acc_val))
+    
+    end = datetime.datetime.now()
+    difference = end - start
+    print('Epoch %d | Test_accuracy: %.4f' % (epoch, acc_val))
+    print("the time is:", difference)
 
-#
 
 
