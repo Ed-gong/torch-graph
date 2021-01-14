@@ -66,16 +66,16 @@ class GATConv(nn.Module):
         self._allow_zero_in_degree = set_value
 
     def forward(self, graph, feat):
-        print(feat, " ------0000", feat.size(), self._num_heads, self._out_feats)
+        #print(feat, " ------0000", feat.size(), self._num_heads, self._out_feats)
         self.fc_src, self.fc_dst = self.fc, self.fc
         feat_src = feat_dst = self.fc(feat).view(-1, self._num_heads, self._out_feats)
-        print(feat_src.size(), " 1111")
-        print(self.attn_l.size(), "2222")
+        #print(feat_src.size(), " 1111")
+        #print(self.attn_l.size(), "2222")
         el = (feat_src * self.attn_l).sum(dim=-1).unsqueeze(-1)
         er = (feat_dst * self.attn_r).sum(dim=-1).unsqueeze(-1)
-        el = el.flatten(1)
-        er = er.flatten(1)
-        print(el.size(), " 3333")
+        #el = el.flatten(1)
+        #er = er.flatten(1)
+        #print(el.size(), " 3333")
 
         # map_input = self.linear(feat).view(-1, self._num_heads, self._out_feats)
         # print (map_input.size())
@@ -87,8 +87,8 @@ class GATConv(nn.Module):
         # since the score is scalar
         # dim = feat_src.size(1)
         dim = self._out_feats
-        print('222')
-        print(dim)
+        #print('222')
+        #print(dim)
         # apply_edge add the attention_score by vertex, el and er are 3D tensor
         edge_score = sparse.apply_edge_heads(graph, el, er)
         efficient_score = self.leaky_relu(edge_score)
@@ -97,7 +97,7 @@ class GATConv(nn.Module):
         #     // std::cout << "nani6" << std::endl;
         # torch::Tensor
         rst = sparse.run_gspmv_op_heads(graph, feat_src, edge_score_by_softmax, num_vcount, dim)
-        print (rst.size(), " 4444")
+        #print (rst.size(), " 4444")
 
         # activation
         if self.activation:

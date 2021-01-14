@@ -5,6 +5,8 @@ import util
 import itertools
 import torch.nn.functional as F
 import pygraph as gone
+import numpy as np
+import datetime
 
 class GCN(nn.Module):
     def __init__(self,
@@ -37,12 +39,22 @@ class GCN(nn.Module):
 
 
 if __name__ == "__main__":
-    ingestion_flag = gone.enumGraph.eUdir
-    ifile = "/home/datalab/data/test3"
+    ingestion_flag = gone.enumGraph.eUnidir | gone.enumGraph.eDoubleEdge | gone.enumGraph.eCreateEID
+    edge_dt = np.dtype([('src', np.int32), ('dst', np.int32), ('edgeid', np.int32)])
+    ifile = "/home/datalab/data/test3/cora"
     num_node = 2708
-    manager = gone.pgraph_manager_t(ingestion_flag, num_node, ifile, "")
-    manager.run_bfs(1);
-    snap_t = manager.create_static_view(gone.enumView.eStale)
+    outdir = ""
+    num_sources = 1
+    num_thread = 8
+    graph = gone.init(1, 1, outdir, num_sources, num_thread)  # Indicate one pgraph, and one vertex type
+    tid0 = graph.init_vertex_type(num_node, True, "gtype")  # initiate the vertex type
+    pgraph = graph.create_schema(ingestion_flag, tid0, "friend", edge_dt)  # initiate the pgraph
+    # creating graph directly from file requires some efforts. Hope to fix that later
+    manager = graph.get_pgraph_managerW(0)  # This assumes single weighted graph, edgeid is the weight
+    manager.add_edges_from_dir(ifile, ingestion_flag)  # ifile has no weights, edgeid will be generated
+    pgraph.wait()  # You can't call add_edges() after wait(). The need of it will be removed in future.
+    manager.run_bfs(1)
+    snap_t = gone.create_static_view(pgraph, gone.enumView.eStale)
     input_feature_dim = 1433
     net = GCN(snap_t, input_feature_dim, 16, 7, 3, 1)
 
@@ -63,7 +75,8 @@ if __name__ == "__main__":
     all_logits = []
     print(input_X)
     print("-------------------")
-    for epoch in range(100):
+    start = datetime.datetime.now()
+    for epoch in range(200):
         logits = net(input_X)
         all_logits.append(logits.detach())
         logp = F.log_softmax(logits, 1)
@@ -80,5 +93,8 @@ if __name__ == "__main__":
 
         acc_val = util.accuracy(logp_test[labeled_nodes_test], labels[labeled_nodes_test])
         print('Epoch %d | Test_accuracy: %.4f' % (epoch, acc_val))
+    end = datetime.datetime.now()
+    difference = end - start
+    print ('time is:', difference)
 
-#
+

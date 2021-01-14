@@ -70,10 +70,10 @@ class GATConv(nn.Module):
     def forward(self, graph, feat):
         self.fc_src, self.fc_dst = self.fc, self.fc
         feat_src = feat_dst = self.fc(feat).view(-1, self._out_feats)
-        print(feat_src.size())
-        print(self.attn_l.size())
+        #print(feat_src.size())
+        #print(self.attn_l.size())
         el = (feat_src * self.attn_l).sum(dim=-1).unsqueeze(-1)
-        print(el.size())
+        #print(el.size())
         er = (feat_dst * self.attn_r).sum(dim=-1).unsqueeze(-1)
 
 
@@ -94,7 +94,7 @@ class GATConv(nn.Module):
         #     // std::cout << "nani6" << std::endl;
         # torch::Tensor
         rst = sparse.run_gspmv_op(graph, feat_src, edge_score_by_softmax, num_vcount, dim)
-        print (rst.size())
+        #print (rst.size())
 
         # activation
         if self.activation:

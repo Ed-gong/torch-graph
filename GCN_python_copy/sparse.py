@@ -120,7 +120,8 @@ class EdgeSoftmax_heads(th.autograd.Function):
         out = th.zeros(num_vcount, heads)
         result = th.utils.dlpack.to_dlpack(out)
         # todo score % score_sum.out is | E |
-        graph.gsddmm(score_sum, score, result, gone.enumOP.eDIV, 0)
+        graph.gsddmm2d(score_sum, score, result, gone.enumOP.eDIV, 0)
+        ## above 2d is the reason why it can work now
         ctx.backward_cache = graph, num_vcount, dim, out, heads
         return out
 
@@ -216,7 +217,7 @@ def apply_edge(graph, el, er):
     edge_count = graph.get_edge_count()
     res = th.zeros(edge_count, dim)
     result = th.utils.dlpack.to_dlpack(res)
-    graph.apply_edges_op(feat_el, feat_er, result)
+    graph.apply_edges_op2d(feat_el, feat_er, result)
     return res
 
 

@@ -6,6 +6,7 @@ import itertools
 import torch.nn.functional as F
 import pygraph as gone
 import numpy as np
+import datetime
 
 class GAT(nn.Module):
     def __init__(self,
@@ -44,26 +45,28 @@ class GAT(nn.Module):
         h = inputs
         for l in range(self.num_layers):
             h = self.gat_layers[l](self.graph, h).flatten(1)
-        print('111')
-        print(h.size())
+        #print('111')
+        #print(h.size())
         # output projection
         logits = self.gat_layers[-1](self.graph, h).mean(1)
-        print('debug')
-        print(logits.size())
+        #print('debug')
+        #print(logits.size())
         return logits
 
 
 if __name__ == "__main__":
     ingestion_flag = gone.enumGraph.eUnidir | gone.enumGraph.eDoubleEdge| gone.enumGraph.eCreateEID
-    ifile = "/home/datalab/data/test3"
+    ifile = "/home/datalab/data/test3/cora"
     num_node = 2708
+    num_sources = 1
+    num_thread = 2
     # manager = gone.pgraph_manager_tW(ifile, "", ingestion_flag, num_node)
     # snap_t = manager.create_static_view(gone.enumView.eStale)
 
     edge_dt = np.dtype([('src', np.int32), ('dst', np.int32), ('edgeid', np.int32)])
 
     outdir = ""
-    graph = gone.init(1, 1, outdir)  # Indicate one pgraph, and one vertex type
+    graph = gone.init(1, 1, outdir, num_sources, num_thread)  # Indicate one pgraph, and one vertex type
     tid0 = graph.init_vertex_type(2708, True, "gtype") # initiate the vertex type
     pgraph = graph.create_schema(ingestion_flag, tid0, "friend", edge_dt) # initiate the pgraph
 
@@ -77,7 +80,7 @@ if __name__ == "__main__":
 
 
     input_feature_dim = 1433
-    num_heads = 2
+    num_heads = 3
     num_layers = 3
     heads_array = ([num_heads] * num_layers) + [1]
     net = GAT(snap_t, num_layers, input_feature_dim, 16, 7, heads_array, activation = None, feat_drop = 0., attn_drop = 0., negative_slope =0.2, residual = False)
@@ -97,25 +100,33 @@ if __name__ == "__main__":
     # train the network
     optimizer = torch.optim.Adam(itertools.chain(net.parameters()), lr=0.01, weight_decay=5e-4)
     all_logits = []
-    for epoch in range(5):
+    start = datetime.datetime.now()
+    for epoch in range(200):
         logits = net(input_X)
-        print('hhhhha')
-        print(logits.size())
+        #print('hhhhha')
+        #print(logits.size())
         all_logits.append(logits.detach())
         logp = F.log_softmax(logits, 1)
+        #print('loss_size', logp[labeled_nodes_train].size(), labels[labeled_nodes_train].size())
         loss = F.nll_loss(logp[labeled_nodes_train], labels[labeled_nodes_train])
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 
-        print('Epoch %d | Train_Loss: %.4f' % (epoch, loss.item()))
+        #print('Epoch %d | Train_Loss: %.4f' % (epoch, loss.item()))
 
         # check the accuracy for test data
         logits_test = net.forward(input_X)
         logp_test = F.log_softmax(logits_test, 1)
 
         acc_val = util.accuracy(logp_test[labeled_nodes_test], labels[labeled_nodes_test])
-        print('Epoch %d | Test_accuracy: %.4f' % (epoch, acc_val))
+        #print('Epoch %d | Test_accuracy: %.4f' % (epoch, acc_val))
+
+    end = datetime.datetime.now()
+    difference = end - start
+    print("the time of graphpy is:", difference)
+    print('Epoch %d | Test_accuracy: %.4f' % (epoch, acc_val))
+
 
 #
 

@@ -113,27 +113,22 @@ optimizer = torch.optim.Adam(itertools.chain(net.parameters(), embed.parameters(
 #optimizer = torch.optim.Adam([net.parameters(), itertools.chain(embed.parameters())], lr=0.01)
 all_logits = []
 for epoch in range(200):
-    print("ai")
     logits = net.forward(inputs, manager)
-    print("hu")
     # we save the logits for visualization later
     all_logits.append(logits.detach())
     logp = F.log_softmax(logits, 1)
-    print ("predict result")
-    print (logp)
     # we only compute loss for labeled nodes
     
     loss = F.nll_loss(logp[labeled_nodes], labels)
-    print("create graph")
     #make_dot(loss).render("torch_graph", format="png")
 
     optimizer.zero_grad()
     loss.backward()
     optimizer.step()
     
-    print('Epoch %d | Loss: %.4f' % (epoch, loss.item()))
+    #print('Epoch %d | Loss: %.4f' % (epoch, loss.item()))
     loss_record.append(loss.item())
-    print ("the parameter after one update")
+    #print ("the parameter after one update")
     logp_acc = torch.max(logp, 1).indices
     accu, labels_test_temp = accuracy(logp_acc[labeled_nodes_test],labels_test)
     accu_record.append(accu)
@@ -144,7 +139,7 @@ for epoch in range(200):
     
     #print (weight2)
     #print(weight3)
-
+"""
 # check the node predicton class
 print ("node prediction class")
 for v in range(34):
@@ -156,3 +151,4 @@ print ("loss_record")
 print(loss_record)
 print("accu")
 print(accu_record)
+"""

@@ -12,6 +12,7 @@ import torch.nn as nn
 import scipy.sparse as sp
 from dgl.nn.pytorch import GraphConv
 import dgl
+import datetime
 
 def read_data():
     all_data = []
@@ -142,9 +143,6 @@ def accuracy(output, labels):
     #correct = correct.sum()
     correct = 0
     predict = torch.max(output, 1).indices
-    print("emmmm?")
-    print(predict)
-    print(labels)
     for i in range(len(labels)):
         if (predict[i] == labels[i]):
             correct = correct + 1
@@ -188,10 +186,8 @@ class GCN(nn.Module):
         return h
 
 if __name__ == "__main__":
-    torch.classes.load_library("build/libdcgan.so")
-    print(torch.classes.loaded_libraries)
 
-    graph_data_path = "/home/datalab/data/test3/try_3.txt"
+    graph_data_path = "/home/datalab/data/test3/cora.txt"
     # the number of node in the graph
     num_node = 2708
     input_feature_dim = 1433
@@ -219,19 +215,17 @@ if __name__ == "__main__":
     # train the network
     optimizer = torch.optim.Adam(itertools.chain(net.parameters()), lr = 0.01, weight_decay = 5e-4)
     all_logits = []
-    for epoch in range(2):
-        print("ai")
+    start = datetime.datetime.now()
+    for epoch in range(200):
         #print(input_train.size())
         #logits = net.forward(input_X, manager)
         logits = net.forward(graph,input_X)
 
-        print("hu")
         # we save the logits for visualization later
         all_logits.append(logits.detach())
         logp = F.log_softmax(logits, 1)
         #print (logp)
         # we only compute loss for labeled nodes
-        print("ha??")
         #print(logp[labeled_nodes_train])
 
         loss = F.nll_loss(logp[labeled_nodes_train], labels[labeled_nodes_train])
@@ -241,7 +235,7 @@ if __name__ == "__main__":
         loss.backward()
         optimizer.step()
 
-        print('Epoch %d | Train_Loss: %.4f' % (epoch, loss.item()))
+        #print('Epoch %d | Train_Loss: %.4f' % (epoch, loss.item()))
 
         # check the accuracy for test data
         logits_test = net.forward(graph, input_X)
@@ -249,12 +243,11 @@ if __name__ == "__main__":
 
         acc_val = accuracy(logp_test[labeled_nodes_test], labels[labeled_nodes_test])
         print('Epoch %d | Test_accuracy: %.4f' % (epoch, acc_val))
+    end = datetime.datetime.now()
+    difference = end - start
+    print ('time is:', difference)
 
 
 
-print("graph structure")
-#print(type(graph.adjacency_matrix()))
-a = graph.adjacency_matrix()
-torch.save(a, 'cora_dgl.pt')
 
 
